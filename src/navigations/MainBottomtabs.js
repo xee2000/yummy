@@ -3,8 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Home from '../components/Home';
 import Option from '../components/Option';
-import ParkingLocation from '../components/ParkingLocation';
-
+import Parking from '../components/Parking';
 const Tab = createBottomTabNavigator();
 
 const MainBottomTabs = () => {
@@ -20,8 +19,8 @@ const MainBottomTabs = () => {
       }}
     >
       <Tab.Screen
-        name="ParkingLocation"
-        component={ParkingLocation}
+        name="Parking"
+        component={Parking}
         options={{
           tabBarLabel: '주차위치',
           tabBarIcon: ({ color, size }) => (

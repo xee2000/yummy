@@ -4,7 +4,7 @@ import Login from '../components/Login';
 import HomeTabs from '../navigations/HomeTabs';
 import Home from '../components/Home';
 import Option from '../components/Option';
-import ParkingLocation from '../components/ParkingLocation';
+import Parking from '../components/Parking';
 const Stack = createNativeStackNavigator();
 
 const HomeStack = () => (
@@ -25,8 +25,8 @@ const HomeStack = () => (
       options={{ headerShown: false }} // Login 화면에서는 헤더 숨기기
     />
     <Stack.Screen
-      name="ParkingLocation"
-      component={ParkingLocation}
+      name="Parking"
+      component={Parking}
       options={{ headerShown: false }} // Login 화면에서는 헤더 숨기기
     />
     <Stack.Screen

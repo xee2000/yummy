@@ -8,11 +8,11 @@ import {
   Platform,
   Alert,
   KeyboardAvoidingView,
-  SafeAreaView,
 } from 'react-native';
 import EncryptedStorage from 'react-native-encrypted-storage';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
