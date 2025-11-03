@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, { useState } from 'react';
 import {
   Text,
   View,
@@ -7,11 +7,11 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
-  Dimensions,
-  NativeModules,
+  KeyboardAvoidingView,
+  SafeAreaView,
 } from 'react-native';
 import EncryptedStorage from 'react-native-encrypted-storage';
-import {useNavigation} from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {
   widthPercentageToDP as wp,
@@ -21,215 +21,232 @@ import RestApi from '../common/RestApi';
 
 const LoginPage = () => {
   const navigation = useNavigation();
-  const [buildingOptions, setBuildingOptions] = useState([]);
-  const [selectedValue, setSelectedValue] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [secure, setSecure] = useState(true);
+  const [loading, setLoading] = useState(false);
 
+  const canSubmit =
+    username.trim().length > 0 && password.length > 0 && !loading;
 
   const handleLogin = async () => {
-    const login = {
-      building_id: selectedValue,
-      id: username,
-      pwd: password,
-    };
+    if (!canSubmit) return;
+    setLoading(true);
+
+    // const login = {
+    //   id: username,
+    //   pwd: password,
+    // };
+
     try {
-      const response = await RestApi.post('/api/user/login', login);
-      if (response.status === 200) {
-        await EncryptedStorage.setItem('user', JSON.stringify(response.data));
-        const {UserModule, SmartTagConnect} = NativeModules;
-        UserModule.startUserIntentService(JSON.stringify(response.data));
-        UserModule.StartApplication(JSON.stringify(response.data));
-        SmartTagConnect.StartBeaconService();
-        navigation.navigate('HomeTabs');
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      Alert.alert('로그인 실패', '로그인 중 오류가 발생했습니다.');
+      navigation.navigate('HomeTabs');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerContainer}>
-        <View style={styles.logoContainer}>
-          <Text style={styles.Logo_Text}>BALEM</Text>
-          <Text style={styles.Logo_Subtitle}>Smart Wallness Solution</Text>
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.select({ ios: 'padding', android: undefined })}
+      >
+        {/* 헤더 (브랜드/페이지 타이틀) */}
+        <View style={styles.header}>
+          <Text style={styles.brand}>스마트 파킹</Text>
+          <Text style={styles.title}>로그인</Text>
         </View>
-      </View>
 
-      <View style={styles.bodyContainer}>
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>아파트 단지 선택</Text>
-          <View style={styles.pickerContainer}>
-            <Text style={styles.selectedText}>
-              {selectedValue
-                ? buildingOptions.find(b => b.value === selectedValue)?.label
-                : '단지를 선택해주세요'}
-            </Text>
+        {/* 폼 */}
+        <View style={styles.form}>
+          <View style={styles.inputWrap}>
+            <Text style={styles.label}>아이디</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="아이디를 입력하세요"
+              placeholderTextColor="#9AA3AF"
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="next"
+            />
           </View>
 
-          <Text style={styles.label}>아이디</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="아이디를 입력해주세요"
-            placeholderTextColor="#aaa"
-            value={username}
-            onChangeText={setUsername}
-          />
-          <Text style={styles.label}>패스워드 입력</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="패스워드"
-            placeholderTextColor="#aaa"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
+          <View style={styles.inputWrap}>
+            <Text style={styles.label}>비밀번호</Text>
+            <View style={styles.passwordRow}>
+              <TextInput
+                style={[styles.input, styles.passwordInput]}
+                placeholder="비밀번호를 입력하세요"
+                placeholderTextColor="#9AA3AF"
+                secureTextEntry={secure}
+                value={password}
+                onChangeText={setPassword}
+                autoCapitalize="none"
+                returnKeyType="done"
+              />
+              <TouchableOpacity
+                onPress={() => setSecure(!secure)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={styles.eyeBtn}
+              >
+                <Icon
+                  name={secure ? 'eye-off-outline' : 'eye-outline'}
+                  size={hp('2.6%')}
+                  color="#6B7280"
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* 보조 액션 */}
+          <View style={styles.subActions}>
+            <TouchableOpacity
+              onPress={() =>
+                Alert.alert(
+                  '안내',
+                  '아이디/비밀번호 찾기 화면으로 이동해주세요.',
+                )
+              }
+            >
+              <Text style={styles.linkText}>아이디/비밀번호 찾기</Text>
+            </TouchableOpacity>
+            <View style={styles.dot} />
+            <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+              <Text style={styles.linkText}>회원가입</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-          <Text style={styles.loginButtonText}>로그인</Text>
-        </TouchableOpacity>
-
-        {/* 카드형 링크 */}
-        <View style={styles.cardLinkContainer}>
+        {/* 고정 CTA 버튼 */}
+        <View style={styles.ctaWrap}>
           <TouchableOpacity
-            style={styles.card}
-            onPress={() => Alert.alert('아이디/비밀번호 찾기')}>
-            <Icon
-              name="key-outline"
-              size={hp('3%')}
-              color="#1E90FF"
-              style={styles.cardIcon}
-            />
-            <Text style={styles.cardText}>아이디 / 비밀번호 찾기</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => navigation.navigate('Signup')}>
-            <Icon
-              name="person-add-outline"
-              size={hp('3%')}
-              color="#1E90FF"
-              style={styles.cardIcon}
-            />
-            <Text style={styles.cardText}>회원가입</Text>
+            style={[
+              styles.loginButton,
+              !canSubmit && styles.loginButtonDisabled,
+            ]}
+            onPress={handleLogin}
+            disabled={!canSubmit}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.loginButtonText}>
+              {loading ? '로그인 중…' : '로그인'}
+            </Text>
           </TouchableOpacity>
         </View>
-      </View>
-    </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF',
   },
-  headerContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#1E90FF',
-    height: hp('30%'),
+  header: {
+    paddingHorizontal: wp('6%'),
+    paddingTop: hp('2%'),
+    paddingBottom: hp('1%'),
   },
-  logoContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  brand: {
+    fontSize: hp('2%'),
+    color: '#6B7280', // 토스 느낌의 차분한 보조 텍스트
+    fontWeight: '600',
+    marginBottom: hp('0.8%'),
+  },
+  title: {
+    fontSize: hp('4%'),
+    fontWeight: '800',
+    color: '#111827',
+  },
+
+  form: {
+    paddingHorizontal: wp('6%'),
+    paddingTop: hp('3%'),
+    gap: hp('1.8%'),
+  },
+  inputWrap: {
     width: '100%',
   },
-  Logo_Text: {
-    fontSize: hp('5%'),
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  Logo_Subtitle: {
-    fontSize: hp('2%'),
-    color: '#FFFFFF',
-    textAlign: 'center',
-    marginTop: hp('1%'),
-  },
-  bodyContainer: {
-    flex: 1,
-    paddingHorizontal: wp('5%'),
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'flex-start',
-    paddingTop: hp('3%'),
-  },
-  inputContainer: {
-    marginBottom: hp('2%'),
-  },
   label: {
-    fontSize: hp('2%'),
-    color: '#333',
+    fontSize: hp('1.8%'),
+    color: '#6B7280',
     marginBottom: hp('1%'),
   },
   input: {
-    fontSize: hp('2%'),
+    fontSize: hp('2.1%'),
     height: hp('6%'),
-    borderColor: '#CCC',
     borderWidth: 1,
-    borderRadius: wp('2%'),
-    marginBottom: hp('2%'),
+    borderColor: '#E5E7EB',
+    borderRadius: wp('3%'),
     paddingHorizontal: wp('4%'),
-    color: '#000',
-    backgroundColor: '#FFF',
+    backgroundColor: '#F9FAFB',
+    color: '#111827',
   },
-  pickerContainer: {
-    borderColor: '#CCC',
-    borderWidth: 1,
-    borderRadius: wp('2%'),
-    padding: wp('3%'),
-    marginBottom: hp('2%'),
-    backgroundColor: '#FFF',
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  selectedText: {
-    color: '#000',
-    fontSize: hp('2%'),
+  passwordInput: {
+    flex: 1,
+    paddingRight: wp('12%'),
+  },
+  eyeBtn: {
+    position: 'absolute',
+    right: wp('4%'),
+    height: '100%',
+    justifyContent: 'center',
+  },
+
+  subActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp('3%'),
+    marginTop: hp('1%'),
+  },
+  linkText: {
+    fontSize: hp('1.9%'),
+    color: '#2563EB', // 토스 계열 블루
+    fontWeight: '600',
+  },
+  dot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E7EB',
+  },
+
+  ctaWrap: {
+    marginTop: 'auto',
+    paddingHorizontal: wp('6%'),
+    paddingVertical: hp('2%'),
   },
   loginButton: {
     alignItems: 'center',
-    backgroundColor: '#1E90FF',
+    justifyContent: 'center',
+    backgroundColor: '#2563EB',
     paddingVertical: hp('2%'),
     borderRadius: wp('3%'),
-    marginTop: hp('2%'),
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 5,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: Platform.OS === 'ios' ? 0.25 : 0, // iOS 살짝 그림자
+    shadowRadius: 10,
+    elevation: 0, // Android는 평평하게
+  },
+  loginButtonDisabled: {
+    backgroundColor: '#93C5FD',
   },
   loginButtonText: {
     fontSize: hp('2.2%'),
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  cardLinkContainer: {
-    marginTop: hp('3%'),
-    paddingHorizontal: wp('5%'),
-    gap: hp('1.5%'),
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    paddingVertical: hp('1.8%'),
-    paddingHorizontal: wp('4%'),
-    borderRadius: wp('3%'),
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  cardIcon: {
-    marginRight: wp('3%'),
-  },
-  cardText: {
-    fontSize: hp('2%'),
-    color: '#1E90FF',
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
 });
 
