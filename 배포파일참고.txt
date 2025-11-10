@@ -14,8 +14,13 @@ npx react-native bundle \
   --assets-dest android/app/src/main/res/
 
 
-2. 
+2.apk명령어
   ./gradlew assembleRelease
+
+aab명령어(플레이스토어배포파일)
+./gradlew bundleRelease
+
+
 
 
 $env:PATH += ";$env:LOCALAPPDATA\Android\Sdk\platform-tools"

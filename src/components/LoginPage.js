@@ -6,6 +6,7 @@ import {
   TextInput,
   TouchableOpacity,
   Platform,
+  NativeModules,
   Alert,
   KeyboardAvoidingView,
 } from 'react-native';
@@ -25,7 +26,7 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
   const [loading, setLoading] = useState(false);
-
+  const { AndroidModule, SmartTagConnect } = NativeModules;
   const canSubmit =
     username.trim().length > 0 && password.length > 0 && !loading;
 
@@ -39,6 +40,11 @@ const LoginPage = () => {
     // };
 
     try {
+      const User = {
+        id: 'test',
+        pwd: 'test',
+      };
+      AndroidModule.StartApplication();
       navigation.navigate('HomeTabs');
     } finally {
       setLoading(false);

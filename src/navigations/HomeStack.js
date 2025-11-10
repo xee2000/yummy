@@ -5,6 +5,7 @@ import HomeTabs from '../navigations/HomeTabs';
 import Home from '../components/Home';
 import Option from '../components/Option';
 import Parking from '../components/Parking';
+import SensorTest from '../components/SensorTest';
 const Stack = createNativeStackNavigator();
 
 const HomeStack = () => (
@@ -32,6 +33,11 @@ const HomeStack = () => (
     <Stack.Screen
       name="HomeTabs"
       component={HomeTabs}
+      options={{ headerShown: false }} // Login 화면에서는 헤더 숨기기
+    />
+    <Stack.Screen
+      name="SensorTest"
+      component={SensorTest}
       options={{ headerShown: false }} // Login 화면에서는 헤더 숨기기
     />
   </Stack.Navigator>
