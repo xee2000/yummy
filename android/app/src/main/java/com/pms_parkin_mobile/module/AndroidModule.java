@@ -1,5 +1,6 @@
 package com.pms_parkin_mobile.module;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
@@ -15,6 +16,7 @@ import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.WritableMap;
 import com.pms_parkin_mobile.service.App;
 import com.pms_parkin_mobile.service.BleScanner;
+import com.pms_parkin_mobile.util.PermissionManager;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -112,5 +114,31 @@ public class AndroidModule extends ReactContextBaseJavaModule {
             Intent intent = new Intent(ctx, BleScanner.class);
             ctx.stopService(intent); // ✅ 시스템에 서비스 중지 요청
         }
+    }
+
+    @ReactMethod
+    public void requestAllPrimaryPermissions() {
+        Activity activity = getCurrentActivity();
+        if (activity == null) return;
+
+        // 이미 모두 허용됨 → 바로 종료
+        if (PermissionManager.hasAllPrimaryPermissions(activity)) {
+            return;
+        }
+
+        // 실제 요청 함수 (PermissionManager 내부의 분기 로직 그대로 활용)
+        PermissionManager.requestRuntimePermissions(activity);
+    }
+
+    @ReactMethod
+    public void hasAllPrimaryPermissions(Promise promise) {
+        Activity activity = getCurrentActivity();
+        if (activity == null) {
+            promise.resolve(false);
+            return;
+        }
+
+        boolean ok = PermissionManager.hasAllPrimaryPermissions(activity);
+        promise.resolve(ok);
     }
 }

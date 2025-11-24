@@ -61,7 +61,7 @@ public class TimerSingleton {
         if (mWholeTimer != null) mWholeTimer = null;
         //서비스가 시작했으면 처음은 false니까 진입
         if (!COLLECT_START_BEACON_CALC) {
-
+            Log.d("TIMER"," START_CALC_TIMER 진입");
             START_CALC_TIMER();
         }
         //total 15min timer
@@ -83,6 +83,7 @@ public class TimerSingleton {
             @Override
             public void onFinish() {
 
+
                 if (App.getInstance().isServiceFlag()) {
 
                     if (COLLECT_START_BEACON_CALC) {
@@ -100,7 +101,7 @@ public class TimerSingleton {
                                 mAccelTimer.onFinish();
                                 mAccelTimer.cancel();
                             } catch (RuntimeException e) {
-                                Log.d("RunTimeException - ACCEL TIMER FINISH: %s", e.getMessage());
+                                Log.d("RunTimeExceptionRunTimeException - ACCEL TIMER FINISH: %s", e.getMessage());
                             }
                         }
                     }
@@ -122,7 +123,7 @@ public class TimerSingleton {
 
                     RestController.getInstance().parking(App.getInstance().getUserId(), App.getInstance().getDong(), App.getInstance().getHo(), total, new Callback<Void>(){
                         @Override public void onResponse(Call<Void> call, Response<Void> response) {
-                            Log.d("Success", "response : " + response.message());
+                            Log.d("Success1", "response : " + response.message());
                             App.getInstance().setStartFlag(false);
                         }
 
@@ -193,7 +194,7 @@ public class TimerSingleton {
 
                             RestController.getInstance().parking(App.getInstance().getUserId(), App.getInstance().getDong(), App.getInstance().getHo(), total, new Callback<Void>(){
                                 @Override public void onResponse(Call<Void> call, Response<Void> response) {
-                                    Log.d("Success", "response : " + response.message());
+                                    Log.d("Success2", "response : " + response.message());
                                     ParkingAlarm(App.getInstance().getContext());
                                     App.getInstance().setStartFlag(false);
                                 }
