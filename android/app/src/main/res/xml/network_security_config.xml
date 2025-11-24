@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 모든 도메인 및 IP 주소에 대해 cleartext (HTTP) 허용 -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

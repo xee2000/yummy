@@ -3,6 +3,7 @@ package com.pms_parkin_mobile.api;
 
 
 
+import com.pms_parkin_mobile.dto.Total;
 import com.pms_parkin_mobile.dto.User;
 
 import java.util.List;
@@ -18,6 +19,13 @@ import retrofit2.http.Query;
 public interface RetrofitAPI {
 
 
-    @GET("/balem_web/api/user/get")
+    @GET("app/user/get")
     Call<User> getUserId(@Query("id") Integer userId);
+
+    @POST("app/gyroInfo")
+    Call<Void> gyroinfo(@Query("userId") String userId,@Query("count") int errorcode);
+
+    @POST("app/calcLocation")
+    Call<Void> parking(@Query("userId")String userId,@Query("dong")String dong, @Query("ho")String ho, @Body Total total);
 }
+

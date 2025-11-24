@@ -6,8 +6,8 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 
-import com.pms_parkin_mobile.App;
 import com.pms_parkin_mobile.dto.User;
+import com.pms_parkin_mobile.service.App;
 
 import org.json.JSONException;
 

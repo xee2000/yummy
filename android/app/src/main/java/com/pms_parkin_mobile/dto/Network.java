@@ -5,6 +5,6 @@ import lombok.Data;
 @Data
 public class Network {
 
-    private String ip = "http://221.158.214.211";
-    private String port = "12683";
+    private String ip = "http://192.168.0.17";
+    private String port = "8080";
 }

@@ -21,15 +21,14 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
-import com.pms_parkin_mobile.App;
 import com.pms_parkin_mobile.R;
 import com.pms_parkin_mobile.api.RestController;
+import com.pms_parkin_mobile.dataManager.SaveArrayListValue;
 
 import org.altbeacon.beacon.Beacon;
 import org.altbeacon.beacon.BeaconConsumer;
 import org.altbeacon.beacon.BeaconManager;
 import org.altbeacon.beacon.BeaconParser;
-import org.altbeacon.beacon.Identifier;
 import org.altbeacon.beacon.MonitorNotifier;
 import org.altbeacon.beacon.RangeNotifier;
 import org.altbeacon.beacon.Region;
@@ -40,24 +39,28 @@ import java.util.Comparator;
 
 public class BleScanner extends Service implements BeaconConsumer, SensorEventListener {
 
-    private static final String TAG = "BeaconScanService";
+    private static final String TAG = "BleScanner";
     private static final String CHANNEL_ID = "connect_beacon";
 
     // ===== Beacon =====
+    private static final String TARGET_UUID = "20151005-8864-5654-3020-010400240902";
+
     private final Region beaconRegion = new Region(
-            "all-beacons",
-            Identifier.parse("20151005-8864-5654-3020-010400240902"),
-            null, null
+            "target-uuid-only",
+            org.altbeacon.beacon.Identifier.parse(TARGET_UUID), // UUID 고정
+            null,                                               // Major 무관
+            null                                                // Minor 무관
     );
     private BeaconManager beaconManager;
     private RestController controller;
-
     private boolean isInsideRegion = false;
     private int previousMinor = -1;
-
+    private BeaconFunction mbaconFunction;
+    private SaveArrayListValue mSaveArrayListValue;
     // ===== Sensor =====
     private SensorManager sensorManager;
     private Sensor accel, gyro;
+    private Context context;
 
     // 리시버 등록 여부 추적
     private boolean bluetoothReceiverRegistered = false;
@@ -84,10 +87,10 @@ public class BleScanner extends Service implements BeaconConsumer, SensorEventLi
         super.onCreate();
         Log.d(TAG, "onCreate()");
         createNotificationChannel();
+        context = this;
         startAsForeground();
-
-        controller = new RestController();
-
+        mbaconFunction = new BeaconFunction(getApplicationContext());
+        mSaveArrayListValue = new SaveArrayListValue();
         // ===== Sensor 등록 =====
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
@@ -95,13 +98,13 @@ public class BleScanner extends Service implements BeaconConsumer, SensorEventLi
             gyro  = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
 
             if (accel != null) {
-                sensorManager.registerListener(this, accel, SensorManager.SENSOR_DELAY_GAME);
+                sensorManager.registerListener(this, accel, SensorManager.SENSOR_DELAY_UI);
                 Log.d(TAG, "Accelerometer registered");
             } else {
                 Log.w(TAG, "No accelerometer sensor");
             }
             if (gyro != null) {
-                sensorManager.registerListener(this, gyro, SensorManager.SENSOR_DELAY_GAME);
+                sensorManager.registerListener(this, gyro, SensorManager.SENSOR_DELAY_UI);
                 Log.d(TAG, "Gyroscope registered");
             } else {
                 Log.w(TAG, "No gyroscope sensor");
@@ -113,9 +116,24 @@ public class BleScanner extends Service implements BeaconConsumer, SensorEventLi
         // ===== AltBeacon 설정 =====
         beaconManager = BeaconManager.getInstanceForApplication(this);
         beaconManager.getBeaconParsers().clear();
+        beaconManager.getBeaconParsers().clear();
+
+        // iBeacon
         beaconManager.getBeaconParsers().add(new BeaconParser()
-                .setBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24")
-        );
+                .setBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24"));
+
+        // AltBeacon
+        beaconManager.getBeaconParsers().add(new BeaconParser()
+                .setBeaconLayout("m:2-3=beac,i:4-19,i:20-21,i:22-23,p:24-24"));
+
+        // Eddystone UID
+        beaconManager.getBeaconParsers().add(new BeaconParser()
+                .setBeaconLayout("s:0-1=feaa,m:2-2=00,p:3-3:-41,i:4-13,i:14-19"));
+
+        // Eddystone URL
+        beaconManager.getBeaconParsers().add(new BeaconParser()
+                .setBeaconLayout("s:0-1=feaa,m:2-2=10,p:3-3:-41"));
+
         beaconManager.setForegroundScanPeriod(2000L);
         beaconManager.setForegroundBetweenScanPeriod(0L);
         beaconManager.setBackgroundScanPeriod(2000L);
@@ -144,7 +162,6 @@ public class BleScanner extends Service implements BeaconConsumer, SensorEventLi
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(TAG, "onStartCommand()");
         // 서비스 상태 true로 마킹
-        App.getInstance().setServiceStatus(true);
 
         // 혹시라도 누락되었을 경우 스캔/센서 보강
         if (beaconManager != null && !beaconManager.isBound(this)) {
@@ -201,7 +218,7 @@ public class BleScanner extends Service implements BeaconConsumer, SensorEventLi
         stopBeaconScan();
 
         // 서비스 상태 off
-        App.getInstance().setServiceStatus(false);
+        App.getInstance().setServiceFlag(false);
     }
 
     @Nullable
@@ -235,24 +252,69 @@ public class BleScanner extends Service implements BeaconConsumer, SensorEventLi
             }
         });
 
+        // ✅ RangeNotifier 등록 (중복 onBeaconServiceConnect 제거, @Override 위치 수정)
         beaconManager.addRangeNotifier(new RangeNotifier() {
             @Override
             public void didRangeBeaconsInRegion(Collection<Beacon> beacons, Region region) {
-                Log.d(TAG, "didRangeBeaconsInRegion: count=" + beacons.size());
-                if (!isInsideRegion || beacons.isEmpty()) return;
+                for (Beacon b : beacons) {
+                    Log.d(TAG,
+                            "Beacon: uuid=" + b.getId1() +
+                                    ", major=" + b.getId2() +
+                                    ", minor=" + b.getId3() +
+                                    ", rssi=" + b.getRssi() +
+                                    ", txPower=" + b.getTxPower());
+                }
 
-                Beacon strongest = Collections.max(beacons,
-                        Comparator.comparingInt(Beacon::getRssi)
-                );
-                int minor = strongest.getId3().toInt();
+                if (beacons.isEmpty()) return;
+
+                Beacon strongest = Collections.max(beacons, Comparator.comparingInt(Beacon::getRssi));
+                int major = strongest.getId2() != null ? strongest.getId2().toInt() : -1;
+                int minor = strongest.getId3() != null ? strongest.getId3().toInt() : -1;
+                int rssi = strongest.getRssi();
+
+
+                Log.d(TAG, "App.getInstance().isServiceFlag(): " + App.getInstance().isServiceFlag());
+                Log.d(TAG, "App.getInstance().isStartFlag(): " + App.getInstance().isStartFlag());
+                //2번으로 시작하고 서비스사용여부가 켜짐이며 시작한적이 없을경우
+
+
+                if (minor == 2 && rssi >= -90 && App.getInstance().isServiceFlag() && !App.getInstance().isStartFlag()) {
+                    Log.d(TAG, "Parking Service Start - major: " + major + ", minor: " + minor);
+                    ParkingServiceStart();
+                }
+
+                if(App.getInstance().isServiceFlag() && App.getInstance().isStartFlag()){
+                    String id;
+                      Log.d("BleScanner" , "Start 이후에 데이터 확인");
+                    if (minor > 32768) {
+                        id = String.valueOf(minor - 32768);
+                    } else {
+                        id = String.valueOf(minor);
+                    }
+
+                    if(rssi >= -80){
+                        Log.d("BleScanner" , "신호세기 충분충족");
+
+                        String hexValue = String.format("%04X", Integer.valueOf(id));
+                        mSaveArrayListValue.SaveAccelBeacon(hexValue, String.valueOf(rssi), String.valueOf(App.getInstance().getmWholeTimerDelay()));
+                        // 2025.02.17 by jhlee
+                        mbaconFunction.AddAccelDelay(hexValue, rssi);
+                        int gyroCount = App.getInstance().getmAfterGyroCount();
+                        int accelCount = App.getInstance().getmAfterAccelCount();
+                        int startCount = App.getInstance().getmAfterStartCount();
+                        int CalcBeacon = App.getInstance().getmCollectStartCalcBeacon();
+
+                        Log.d("TimerSingleton", "WholeTimer onTick - GyroCount: " + gyroCount + ", AccelCount: " + accelCount + ", StartCount: " + startCount + ", CalcBeacon: " + CalcBeacon);
+                        App.getInstance().setmAfterGyroCount(gyroCount + 1);
+                        App.getInstance().setmAfterAccelCount(accelCount + 1);
+                        App.getInstance().setmAfterStartCount(startCount + 1);
+                        App.getInstance().setmCollectStartCalcBeacon(CalcBeacon + 1);
+                    }
+                }
 
                 if (minor != previousMinor) {
-                    Log.d(TAG, "didRange: new minor=" + minor);
                     previousMinor = minor;
-                    App.getInstance().setBeaconMinor(minor);
-                    updateBeaconLocation(String.valueOf(minor));
-                } else {
-                    Log.d(TAG, "didRange: same minor, skip " + minor);
+                    Log.d(TAG, "didRange: new minor=" + minor);
                 }
             }
         });
@@ -265,6 +327,18 @@ public class BleScanner extends Service implements BeaconConsumer, SensorEventLi
         } catch (RemoteException e) {
             Log.e(TAG, "startMonitoring/Ranging 실패", e);
         }
+    }
+
+    //서비스 시작시 1씩 증가하도록 한다
+    private void ParkingServiceStart() {
+        //서비스가 시작현경우 상태를 true로 활성화해준다
+        Log.d(TAG, "ParkingServiceStart() 호출");
+        TimerSingleton.getInstance().StartWholeTimer();
+        String currentTime = new java.text.SimpleDateFormat(
+                "yyyy-MM-dd HH:mm:ss",
+                java.util.Locale.getDefault()
+        ).format(new java.util.Date());
+        App.getInstance().setTime(currentTime);
     }
 
     private void startBeaconScan() {
@@ -309,12 +383,13 @@ public class BleScanner extends Service implements BeaconConsumer, SensorEventLi
         if (event == null || event.sensor == null) return;
         if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
             float[] v = event.values;
-//            Log.d(TAG, String.format("Accel: x=%.3f y=%.3f z=%.3f", v[0], v[1], v[2]));
-            SensorTest.ReadAccel(event.values);
+            // Log.d(TAG, String.format("Accel: x=%.3f y=%.3f z=%.3f", v[0], v[1], v[2]));
+            SensorActive.ReadAccel(event.values);
+
         } else if (event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
             float[] v = event.values;
-//            Log.d(TAG, String.format("Gyro : x=%.3f y=%.3f z=%.3f", v[0], v[1], v[2]));
-            SensorTest.ReadGyro(event.values);
+            // Log.d(TAG, String.format("Gyro : x=%.3f y=%.3f z=%.3f", v[0], v[1], v[2]));
+            SensorActive.ReadGyro(event.values);
         }
     }
 

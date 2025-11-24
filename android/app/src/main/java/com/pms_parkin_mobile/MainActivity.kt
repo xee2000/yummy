@@ -1,51 +1,57 @@
 package com.pms_parkin_mobile
 
 import android.os.Build
+import android.os.Bundle
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 import com.pms_parkin_mobile.util.PermissionManager
-// 필요 시 알림 설정 체크하려면 주석 해제
-// import androidx.core.app.NotificationManagerCompat
 
 class MainActivity : ReactActivity() {
 
-    // RN 메인 컴포넌트 이름 (JS의 AppRegistry.registerComponent 이름과 동일)
     override fun getMainComponentName(): String = "pms_parkin_mobile"
 
-    // RN 기본 델리게이트
     override fun createReactActivityDelegate(): ReactActivityDelegate =
         DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
 
     private var permissionFlowRunning = false
     private var askedOnce = false
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // UI가 붙은 직후 한 틱 뒤에 실행: 최초 설치 직후에도 안정적으로 다이얼로그가 뜸
+        window?.decorView?.post { startPermissionFlow() }
+    }
+
     override fun onResume() {
         super.onResume()
+        // 앱 재진입 시에도(설정 다녀온 뒤 등) 한 번만 시도
+        startPermissionFlow()
+    }
 
+    private fun startPermissionFlow() {
         if (permissionFlowRunning || askedOnce) return
         permissionFlowRunning = true
 
-        val ctx = applicationContext
+        val ctx = this // Activity context
 
-        // Android 13+ 에서만 알림 런타임 권한 필요
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            !PermissionManager.hasAllPermissions(ctx)) {
-            PermissionManager.requestAllPermissions(this)
+        // --- 권한 필요 여부 개별 판정 ---
+        // 알림: Android 13+에서만 런타임 권한
+        val needPostNotifications =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    !PermissionManager.hasPostNotifications(ctx)
+
+        // 위치: 6.0+ 모든 버전에서 런타임 권한
+        val needLocation =
+            !PermissionManager.hasLocationPermissions(ctx)
+
+        if (needPostNotifications || needLocation) {
+            PermissionManager.requestRuntimePermissions(this)
             // 결과는 onRequestPermissionsResult에서 마무리
             return
         }
-
-        // (선택) 전역 알림이 꺼져있으면 설정으로 유도하려면 주석 해제
-        // if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
-        //   PermissionManager.openNotificationSettings(this)
-        //   permissionFlowRunning = false
-        //   askedOnce = true
-        //   return
-        // }
-
-        // (선택) 배터리 최적화 무시 요청
+        // (선택) 배터리 최적화 무시 요청 (Doze 예외)
         PermissionManager.requestIgnoreBatteryOptimization(ctx)
 
         askedOnce = true

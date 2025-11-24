@@ -9,6 +9,8 @@ import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.pms_parkin_mobile.module.ParkingPackage
+import com.pms_parkin_mobile.service.App
+
 
 class MainApplication : Application(), ReactApplication {
 
@@ -36,6 +38,8 @@ class MainApplication : Application(), ReactApplication {
     super.onCreate()
     instance = this
     Log.d("MainApplication", "onCreate called")
+    App.getInstance().init(applicationContext)
     loadReactNative(this)
+
   }
 }

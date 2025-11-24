@@ -13,8 +13,8 @@ public class RetropitClient {
 
     private static Network network = new Network();
     private static Retrofit retrofit = null;
-    private static final String BASE_URL = network.getIp() + ":" + network.getPort();
-
+    private static final String BASE_URL =
+            network.getIp() + ":" + network.getPort() + "/pms-server-web/";
 
     public static RetrofitAPI getApiService(){return getInstance().create(RetrofitAPI.class);}
 

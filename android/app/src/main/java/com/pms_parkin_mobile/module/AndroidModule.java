@@ -13,7 +13,7 @@ import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.WritableMap;
-import com.pms_parkin_mobile.App;
+import com.pms_parkin_mobile.service.App;
 import com.pms_parkin_mobile.service.BleScanner;
 
 import java.util.HashMap;
@@ -35,7 +35,24 @@ public class AndroidModule extends ReactContextBaseJavaModule {
         final Context ctx = getReactApplicationContext();
 
         ctx.startService(new Intent(ctx, UserIntent.class));
+
+
+        Log.d("SERVICE_FLAG", "App : " + App.getInstance().isServiceFlag());
+        Intent intent = new Intent(ctx, BleScanner.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ContextCompat.startForegroundService(ctx, intent);
+        } else {
+            ctx.startService(intent);
+        }
     }
+
+    @ReactMethod
+    public void startUserIntentService(String userData) {
+        Intent intent = new Intent(getReactApplicationContext(), UserIntent.class);
+        intent.putExtra("user", userData);
+        getReactApplicationContext().startService(intent);
+    }
+
 
     @ReactMethod
     public void SensorTestStart() {
@@ -46,12 +63,12 @@ public class AndroidModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void SensorTestStop() {
         App.getInstance().setTestFlag(false);
+        App.getInstance().setSensorStatus(false);
         Log.d("TEST", "App.getInstance() : " + App.getInstance().isSensorStatus());
     }
 
     @ReactMethod
     public void SensorTestResult(Promise promise) {
-        App.getInstance().setTestFlag(false);
         boolean result = App.getInstance().isSensorStatus();
         Log.d("TEST", "SensorTestResult result : " + result);
         promise.resolve(result); // ← 단일 값만 전달
@@ -60,19 +77,28 @@ public class AndroidModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void ServiceCheck(Promise promise) {
         WritableMap map = Arguments.createMap();
+        Log.d("SERVICE_CHECK", "sensor_status : " + App.getInstance().isSensorStatus() + "__" +  App.getInstance().isServiceStatus());
+
         map.putBoolean("sensor_status", App.getInstance().isSensorStatus());
         map.putBoolean("service_status", App.getInstance().isServiceStatus());
         promise.resolve(map);
     }
 
     @ReactMethod
+    public void ServiceRunningCheck(Promise promise) {
+        boolean flag = App.getInstance().isServiceStatus();
+        promise.resolve(flag);
+    }
+
+    @ReactMethod
     public void ServiceFlag(boolean flag) {
-        App.getInstance().setServiceStatus(flag);
 
         final Context ctx = getReactApplicationContext();
 
         if (flag) {
             Log.d("SERVICE_FLAG", "서비스 시작 요청");
+            App.getInstance().setServiceFlag(flag);
+            App.getInstance().setStartFlag(false);
             Intent intent = new Intent(ctx, BleScanner.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 ContextCompat.startForegroundService(ctx, intent);
@@ -80,6 +106,8 @@ public class AndroidModule extends ReactContextBaseJavaModule {
                 ctx.startService(intent);
             }
         } else {
+            App.getInstance().setServiceFlag(flag);
+            App.getInstance().setStartFlag(false);
             Log.d("SERVICE_FLAG", "서비스 중지 요청");
             Intent intent = new Intent(ctx, BleScanner.class);
             ctx.stopService(intent); // ✅ 시스템에 서비스 중지 요청

@@ -15,8 +15,8 @@ public class User {
     private String userPwd;
     private String phone;
     private String userName;
-    private int dong;
-    private int ho;
+    private String dong;
+    private String ho;
     private int buildingId;
     private double latitude;
     private double longitude;
@@ -28,8 +28,8 @@ public class User {
         this.userPwd = jsonObject.getString("user_pwd");
         this.phone = jsonObject.getString("phone");
         this.userName = jsonObject.getString("user_name");
-        this.dong = jsonObject.getInt("dong");
-        this.ho = jsonObject.getInt("ho");
+        this.dong = jsonObject.getString("dong");
+        this.ho = jsonObject.getString("ho");
         this.buildingId = jsonObject.getInt("building_id");
     }
 
@@ -54,11 +54,11 @@ public class User {
         return userName;
     }
 
-    public int getDong() {
+    public String getDong() {
         return dong;
     }
 
-    public int getHo() {
+    public String getHo() {
         return ho;
     }
 

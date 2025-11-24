@@ -40,10 +40,19 @@ const LoginPage = () => {
     // };
 
     try {
-      const User = {
-        id: 'test',
-        pwd: 'test',
+      const user = {
+        id: 1234,
+        dong: '101',
+        ho: '1001',
+        name: '홍길동',
+        phone: '01012345678',
+        email: 'honggildong@example.com',
+        user_name: '홍길동',
+        user_id: 'test',
+        user_pwd: 'test',
+        building_id: 1,
       };
+      AndroidModule.startUserIntentService(JSON.stringify(user));
       AndroidModule.StartApplication();
       navigation.navigate('HomeTabs');
     } finally {
