@@ -16,22 +16,31 @@ const SensorTest = ({ navigation }) => {
   // 'idle' | 'running' | 'done'
   const [phase, setPhase] = useState('idle');
   const [result, setResult] = useState(null); // true | false | null
-  const [count, setCount] = useState(3);
+  const [count, setCount] = useState(0); // 1..2..3 표시용
   const timerRef = useRef(null);
 
-  // 초기: 네이티브 결과 1회 조회 → true면 곧바로 완료 상태로
+  // 어떤 단계인지: 'center' 정면 → 'left' 좌측 → 'right' 우측
+  const [step, setStep] = useState('center'); // 'center' | 'left' | 'right'
+
+  // 이미지 상태
+  // 'stay'      : 정면 기본
+  // 'stay_ok'   : 정면 성공
+  const [imageVariant, setImageVariant] = useState('stay');
+
+  // 초기: 네이티브 결과 1회 조회 → 이미 정면 통과한 상태면 바로 OK로
   useEffect(() => {
     const checkInitial = async () => {
       try {
-        const r = await AndroidModule?.SensorTestResult?.(); // boolean
+        const r = await AndroidModule?.StayResult?.(); // boolean 예상
         if (r === true) {
           setResult(true);
-          setPhase('done'); // 바로 완료화면 + 재실행 버튼 노출
+          setImageVariant('stay_ok');
+          setPhase('done'); // 정면 완료 상태
+          setStep('center'); // 아직 좌측/우측은 안 들어간 상태
         } else {
           setPhase('idle');
         }
       } catch (e) {
-        // 네이티브 부재/에러여도 테스트는 수동 시작 가능
         setPhase('idle');
       }
     };
@@ -41,49 +50,139 @@ const SensorTest = ({ navigation }) => {
     };
   }, []);
 
-  const progress = useMemo(
-    () => ({
-      center: phase !== 'idle',
-      left: phase === 'running' || phase === 'done',
-      right: phase === 'done',
-    }),
-    [phase],
-  );
+  // 상단 뱃지 상태
+  const progress = useMemo(() => {
+    const centerOn =
+      step === 'center' ? phase !== 'idle' || result === true : true;
 
+    const leftOn =
+      step === 'center'
+        ? false
+        : step === 'left'
+        ? phase !== 'idle' || result === true
+        : true; // step === 'right' 이면 이미 좌측까지 끝난 상태
+
+    const rightOn =
+      step === 'right' ? phase !== 'idle' || result === true : false;
+
+    return { center: centerOn, left: leftOn, right: rightOn };
+  }, [step, phase, result]);
+
+  // 안내 문구
   const instruction = useMemo(() => {
-    if (phase === 'idle') return '테스트를 시작하세요.';
-    if (phase === 'running')
-      return `휴대폰을 좌우로 흔들어주세요.\n센서 테스트 진행중입니다... (${count})`;
-    if (phase === 'done') {
-      if (result === true) return '테스트 종료: 센서 정상으로 감지되었습니다.';
-      if (result === false)
-        return '테스트 종료: 센서 감지에 실패했습니다. 다시 시도해주세요.';
-      return '테스트 종료';
+    // 정면 단계
+    if (step === 'center') {
+      if (phase === 'idle') {
+        return '테스트를 시작하세요.\n휴대폰을 정면으로 들고 가만히 두세요.';
+      }
+      if (phase === 'running') {
+        return `휴대폰을 정면으로 들고 가만히 두세요.\n센서 테스트 진행중입니다... (${count} / 3초)`;
+      }
+      if (phase === 'done') {
+        if (result === true) {
+          return '정면 테스트 완료!\n다음, 휴대폰을 좌측으로 돌려주세요.';
+        }
+        if (result === false) {
+          return '테스트 종료: 정면 감지에 실패했습니다.\n다시 시도해주세요.';
+        }
+        return '테스트 종료';
+      }
     }
+
+    // 좌측 단계
+    if (step === 'left') {
+      if (phase === 'idle') {
+        return '휴대폰을 좌측 방향으로 돌려 들고\n테스트를 시작하세요.';
+      }
+      if (phase === 'running') {
+        return `휴대폰을 좌측 방향으로 돌려 가만히 두세요.\n센서 테스트 진행중입니다... (${count} / 3초)`;
+      }
+      if (phase === 'done') {
+        if (result === true) {
+          return '좌측 테스트 완료!\n다음, 휴대폰을 우측으로 돌려주세요.';
+        }
+        if (result === false) {
+          return '테스트 종료: 좌측 감지에 실패했습니다.\n다시 시도해주세요.';
+        }
+        return '테스트 종료';
+      }
+    }
+
+    // 우측 단계
+    if (step === 'right') {
+      if (phase === 'idle') {
+        return '휴대폰을 우측 방향으로 돌려 들고\n테스트를 시작하세요.';
+      }
+      if (phase === 'running') {
+        return `휴대폰을 우측 방향으로 돌려 가만히 두세요.\n센서 테스트 진행중입니다... (${count} / 3초)`;
+      }
+      if (phase === 'done') {
+        if (result === true) {
+          return '우측 테스트까지 모두 완료되었습니다.\n테스트를 종료해 주세요.';
+        }
+        if (result === false) {
+          return '테스트 종료: 우측 감지에 실패했습니다.\n다시 시도해주세요.';
+        }
+        return '테스트 종료';
+      }
+    }
+
     return '';
-  }, [phase, count, result]);
+  }, [step, phase, count, result]);
+
+  // 현재 보여줄 이미지 (정면 이미지 하나만 쓰고, step에 따라 회전)
+  const phoneImageSource = useMemo(() => {
+    if (imageVariant === 'stay_ok') {
+      return require('../assets/phone_stay_ok.png');
+    }
+    // 기본 정면
+    return require('../assets/phone_stay.png');
+  }, [imageVariant]);
+
+  // step에 따라 회전값
+  const phoneStyle = useMemo(() => {
+    let transform = [];
+    if (step === 'left') {
+      // 좌측: 정면 이미지를 왼쪽으로 90도 회전
+      transform.push({ rotate: '-90deg' });
+    } else if (step === 'right') {
+      // 우측: 정면 이미지를 오른쪽으로 90도 회전
+      transform.push({ rotate: '90deg' });
+    }
+    return [styles.phone, transform.length ? { transform } : null];
+  }, [step]);
 
   const startTest = async () => {
     try {
+      // 모드 지정
+      if (step === 'left') {
+        await AndroidModule?.LeftSensorTestStart?.();
+      } else if (step === 'right') {
+        await AndroidModule?.RightSensorTestStart?.();
+      } else {
+        await AndroidModule?.CenterSensorTestStart?.();
+      }
+
+      // 실제 테스트 시작 (flag만 ON)
       await AndroidModule?.SensorTestStart?.();
     } catch (e) {
       console.warn('SensorTestStart error:', e);
     }
 
     setResult(null);
-    setCount(3);
+    setImageVariant('stay');
+    setCount(0);
     setPhase('running');
 
-    // 3초 카운트다운 → 결과 조회
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setCount(prev => {
-        if (prev <= 1) {
+        const next = prev + 1;
+        if (next >= 3) {
           clearInterval(timerRef.current);
-          fetchResult();
-          return 0;
+          fetchStayResult();
         }
-        return prev - 1;
+        return next;
       });
     }, 1000);
   };
@@ -96,36 +195,104 @@ const SensorTest = ({ navigation }) => {
     }
   };
 
-  const fetchResult = async () => {
+  // 3초 이후 각 단계 상태 결과 가져오기
+  const fetchStayResult = async () => {
     try {
-      const r = await AndroidModule?.SensorTestResult?.(); // boolean
-      setResult(!!r);
+      let r = false;
+
+      if (step === 'center') {
+        // 정면 결과
+        r = await AndroidModule?.StayResult?.();
+      } else if (step === 'left') {
+        // 좌측 결과
+        r = await AndroidModule?.LeftResult?.();
+      } else if (step === 'right') {
+        // 우측 결과
+        r = await AndroidModule?.RightResult?.();
+      }
+
+      const ok = !!r;
+      setResult(ok);
+
+      // 중앙만 OK 이미지로 변경, 좌/우는 회전만 유지
+      if (ok && step === 'center') {
+        setImageVariant('stay_ok');
+      }
     } catch (e) {
-      console.warn('SensorTestResult error:', e);
+      console.warn('StepResult error:', e);
       setResult(false);
     } finally {
       setPhase('done');
     }
   };
-
   // 주 버튼 동작
   const onPrimaryPress = async () => {
+    // 1) 테스트 시작 (center / left / right 공통)
     if (phase === 'idle') {
       startTest();
-    } else if (phase === 'done') {
-      // 재실행: Stop 한 번 호출 후 재시작
+      return;
+    }
+
+    // 2) 테스트 종료 후 버튼 동작
+    if (phase === 'done') {
+      // (A) 정면 단계에서 성공했을 때 -> 좌측 단계로 넘어가기
+      if (step === 'center' && result === true) {
+        await stopFlagOnce();
+
+        setStep('left');
+        setPhase('idle');
+        setResult(null);
+        setCount(0);
+        // 좌측 테스트 자동 시작
+        setTimeout(startTest, 80);
+        return;
+      }
+
+      // (B) 좌측 단계에서 성공했을 때 -> 우측 단계로 넘어가기
+      if (step === 'left' && result === true) {
+        await stopFlagOnce();
+
+        setStep('right');
+        setPhase('idle');
+        setResult(null);
+        setCount(0);
+        // 우측 테스트 자동 시작
+        setTimeout(startTest, 80);
+        return;
+      }
+
+      // (C) 그 외에는 현재 단계 재실행 (실패했거나 이미 우측까지 끝난 상태)
       await stopFlagOnce();
       setPhase('idle');
+      setCount(0);
       setTimeout(startTest, 80);
     }
   };
+
+  // 버튼 텍스트
+  const primaryLabel = useMemo(() => {
+    if (phase === 'idle') {
+      if (step === 'center') return '정면 테스트 시작';
+      if (step === 'left') return '좌측 테스트 시작';
+      if (step === 'right') return '우측 테스트 시작';
+    }
+    if (phase === 'running') {
+      return '테스트 중...';
+    }
+    if (phase === 'done') {
+      if (step === 'center' && result === true) return '좌측 테스트 시작';
+      if (step === 'left' && result === true) return '우측 테스트 시작';
+      return '재실행';
+    }
+    return '테스트';
+  }, [phase, step, result]);
 
   return (
     <View style={styles.container}>
       <View style={styles.phoneWrap}>
         <Image
-          source={require('../assets/phone_stay.png')}
-          style={styles.phone}
+          source={phoneImageSource}
+          style={phoneStyle} // ← 여기서 step에 따라 회전
           resizeMode="contain"
         />
       </View>
@@ -144,7 +311,7 @@ const SensorTest = ({ navigation }) => {
         </View>
       )}
 
-      {/* 주 버튼: idle → 테스트 시작 / running → 비활성 / done → 재실행 */}
+      {/* 주 버튼: idle → 테스트 시작 / running → 비활성 / done → 단계 전환 or 재실행 */}
       <TouchableOpacity
         style={[
           styles.primaryBtn,
@@ -154,14 +321,10 @@ const SensorTest = ({ navigation }) => {
         activeOpacity={0.9}
         disabled={phase === 'running'}
       >
-        <Text style={styles.primaryTxt}>
-          {phase === 'idle' && '테스트 시작'}
-          {phase === 'running' && '테스트 중...'}
-          {phase === 'done' && '재실행'}
-        </Text>
+        <Text style={styles.primaryTxt}>{primaryLabel}</Text>
       </TouchableOpacity>
 
-      {/* 보조 버튼: 완료 시 홈으로 이동 (원하지 않으면 이 블록 삭제 가능) */}
+      {/* 보조 버튼: 언제든 홈으로 이동 */}
       {phase === 'done' && (
         <TouchableOpacity
           style={styles.secondaryBtn}

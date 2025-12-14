@@ -18,6 +18,7 @@ const Home = () => {
     const ensureService = async () => {
       try {
         const running = await AndroidModule.ServiceRunningCheck(); // boolean
+        console.log('runnung : ' + running);
         if (!running) {
           await AndroidModule.startApplication(); // 포그라운드 서비스 시작
           // 필요하면 Alert/Toast 추가 가능
@@ -37,6 +38,7 @@ const Home = () => {
 
   const handleManualParkPosition = () => {
     Alert.alert('수동 주차위치', '현재 위치를 주차 위치로 저장했어요.');
+    AndroidModule.passiveParking();
     console.log('[Home] manual park position pressed');
   };
 

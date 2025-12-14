@@ -15,6 +15,7 @@ import com.pms_parkin_mobile.dto.AccelSensor;
 import com.pms_parkin_mobile.dto.AccelSensor2;
 import com.pms_parkin_mobile.dto.Total;
 import com.pms_parkin_mobile.foreground.AppRunning3;
+
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -43,6 +44,7 @@ public class TimerSingleton {
     private boolean mNotStartBeaconStart = false;
     private static TimerSingleton instance;
     private Timer Collect_START_CALC_TIMER;
+
     public static TimerSingleton getInstance() {
         if (instance == null) {
             instance = new TimerSingleton();
@@ -50,18 +52,18 @@ public class TimerSingleton {
         return instance;
     }
 
-    public void StartWholeTimer(){
+    public void StartWholeTimer() {
 
 
         App.getInstance().setStartFlag(true);
-        Log.d("TIMER","타이머 시작");
+        Log.d("TIMER", "타이머 시작");
         int Delay = 900 * 1000;
         AfterStartTIMER();
         AccelTimer();
         if (mWholeTimer != null) mWholeTimer = null;
         //서비스가 시작했으면 처음은 false니까 진입
         if (!COLLECT_START_BEACON_CALC) {
-            Log.d("TIMER"," START_CALC_TIMER 진입");
+            Log.d("TIMER", " START_CALC_TIMER 진입");
             START_CALC_TIMER();
         }
         //total 15min timer
@@ -69,13 +71,17 @@ public class TimerSingleton {
             @Override
             public void onTick(long millisUntilFinished) {
 
+                //자동주차위치 중에 수동을 건경우 즉시 중단하도록 한다
+                if(App.getInstance().isPassiveCheck()){
+                    if (mWholeTimer != null) {
+                        mWholeTimer.cancel();  // ✅ 즉시 멈춤 (onFinish는 호출 안 됨)
+                        mWholeTimer = null;    // 선택: 다시 사용할 때 새로 만들기 위함
+                    }
+                }
 
                 int Time = App.getInstance().getmWholeTimerDelay();
                 Time++;
                 App.getInstance().setmWholeTimerDelay(Time);
-
-
-
 
 
             }
@@ -121,34 +127,27 @@ public class TimerSingleton {
                     App.getInstance().setSAVE_DELAY(App.getInstance().getmWholeTimerDelay());
 
 
-                    RestController.getInstance().parking(App.getInstance().getUserId(), App.getInstance().getDong(), App.getInstance().getHo(), total, new Callback<Void>(){
-                        @Override public void onResponse(Call<Void> call, Response<Void> response) {
-                            Log.d("Success1", "response : " + response.message());
+                    //자동주차위치 중에 수동을 건경우 즉시 중단하도록 한다
+                    if(App.getInstance().isPassiveCheck()){
+                        if (mWholeTimer != null) {
+                            mWholeTimer.cancel();  // ✅ 즉시 멈춤 (onFinish는 호출 안 됨)
+                            mWholeTimer = null;    // 선택: 다시 사용할 때 새로 만들기 위함
                             App.getInstance().setStartFlag(false);
                         }
+                    }else{
+                        RestController.getInstance().parking(App.getInstance().getUserId(), App.getInstance().getDong(), App.getInstance().getHo(), total, new Callback<Void>() {
+                            @Override
+                            public void onResponse(Call<Void> call, Response<Void> response) {
+                                Log.d("Success1", "response : " + response.message());
+                                App.getInstance().setStartFlag(false);
+                            }
 
-                        @Override
-                        public void onFailure(Call<Void> call, Throwable t) {
-                            Log.d("ERROR", "gyroinfo Error : " + t.getMessage());
-                        }
-                    });
-//                    String accelResult = saveArrayListValue.AccelSensorResult();
-//                    AccelSensor accelSensor = new AccelSensor();
-//                    accelSensor.setState(accelResult);
-//                    accelSensor.setSeq(String.valueOf(App.getInstance().getmAccelSequence()));
-//                    accelSensor.setDelay(String.valueOf(App.getInstance().getmWholeTimerDelay()));
-//
-//                    AccelSensor2 accelSensor2 = new AccelSensor2();
-//                    accelSensor2.setState(String.valueOf(App.getInstance().getmAccelCount()));
-//                    accelSensor2.setSeq(String.valueOf(App.getInstance().getmAccelSequence()));
-//                    accelSensor2.setDelay(String.valueOf(App.getInstance().getmWholeTimerDelay()));
-//
-//                    Log.d("TEST","accelSensor - ACCEL : " + accelSensor);
-//                    Log.d("TEST","accelSensor2 - ACCEL : " + accelSensor2);
-//
-//
-//                    App.getInstance().getmAccelSensorArrayList().add(accelSensor);
-//                    App.getInstance().getmAccelSensorArrayList2().add(accelSensor2);
+                            @Override
+                            public void onFailure(Call<Void> call, Throwable t) {
+                                Log.d("ERROR", "gyroinfo Error : " + t.getMessage());
+                            }
+                        });
+                    }
                 }
             }
         }.start();
@@ -163,7 +162,7 @@ public class TimerSingleton {
         Collect_START_CALC_TIMER_TASK = new TimerTask() {
             @Override
             public void run() {
-                Log.d("TimerSingleton","TEST_TIMER_SINGLETON - 30초");
+                Log.d("TimerSingleton", "TEST_TIMER_SINGLETON - 30초");
                 if (App.getInstance().getmCollectStartCalcBeacon() != 0) {
                     Log.d("TimerSingleton", "TEST_TIMER_SINGLETON_VAL - ACCEL_BEACON 0개 아님 종료 처리 : " + App.getInstance().getmCollectStartCalcBeacon());
                     App.getInstance().setmCollectStartCalcBeacon(0);
@@ -171,8 +170,9 @@ public class TimerSingleton {
 
                     Log.d("TimerSingleton", "TEST_TIMER_SINGLETON_VAL - ACCEL_BEACON 0개 종료 처리 : " + App.getInstance().getmCollectStartCalcBeacon());
                     //jhlee 0401 안드로이드에서 accel start 와 queue가 너무 빈번하게 일어나는 케이스로 비콘이 없어서 발생된 현상 맞는지 체크용 gyroinfo 추가
-                    RestController.getInstance().gyroinfo(App.getInstance().getUserId(), 3030, new Callback<Void>(){
-                        @Override public void onResponse(Call<Void> call, Response<Void> response) {
+                    RestController.getInstance().gyroinfo(App.getInstance().getUserId(), 3030, new Callback<Void>() {
+                        @Override
+                        public void onResponse(Call<Void> call, Response<Void> response) {
                             Log.d("TimerSingleton", "response :  : " + response.message());
 
 
@@ -192,8 +192,9 @@ public class TimerSingleton {
                             Log.d("TimerSingleton", "total : " + total);
 
 
-                            RestController.getInstance().parking(App.getInstance().getUserId(), App.getInstance().getDong(), App.getInstance().getHo(), total, new Callback<Void>(){
-                                @Override public void onResponse(Call<Void> call, Response<Void> response) {
+                            RestController.getInstance().parking(App.getInstance().getUserId(), App.getInstance().getDong(), App.getInstance().getHo(), total, new Callback<Void>() {
+                                @Override
+                                public void onResponse(Call<Void> call, Response<Void> response) {
                                     Log.d("Success2", "response : " + response.message());
                                     ParkingAlarm(App.getInstance().getContext());
                                     App.getInstance().setStartFlag(false);
@@ -261,8 +262,9 @@ public class TimerSingleton {
             Collect_START_CALC_TIMER = new Timer();
             Collect_START_CALC_TIMER.schedule(Collect_START_CALC_TIMER_TASK, 30000, 30000);
         } catch (IllegalStateException ex) {
-            RestController.getInstance().gyroinfo(App.getInstance().getUserId(), 3031, new Callback<Void>(){
-                @Override public void onResponse(Call<Void> call, Response<Void> response) {
+            RestController.getInstance().gyroinfo(App.getInstance().getUserId(), 3031, new Callback<Void>() {
+                @Override
+                public void onResponse(Call<Void> call, Response<Void> response) {
 
                 }
 
@@ -273,7 +275,6 @@ public class TimerSingleton {
             });
         }
     }
-
 
 
     public void AfterStartTIMER() {
@@ -383,8 +384,6 @@ public class TimerSingleton {
             }
         }.start();
     }
-
-
 
 
     public boolean isCOLLECT_START_BEACON_CALC() {

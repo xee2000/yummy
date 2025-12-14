@@ -52,6 +52,10 @@ public class App {
     private int mSaveCountPitch = 0;
     private boolean TestCompleteFlag = false;
     private int SAVE_DELAY = 0;
+    private boolean StayTestResult = false;
+    private boolean LeftTestResult = false;
+    private boolean RightTestResult = false;
+    private String TestSensorMode = "";
 
     public int getSAVE_DELAY() {
         return SAVE_DELAY;
@@ -103,6 +107,8 @@ public class App {
     private LinkedHashSet<String> saveDelayList = null;
     private ArrayList<Total> mTotalArrayList;
     private Total pendingTotal;
+    private boolean passiveCheck;
+
     public LinkedHashSet<String> SetDelayList(String value){
         saveDelayList.add(value);
         return saveDelayList;
@@ -219,6 +225,16 @@ public class App {
         this.mTotalArrayList = mTotalArrayList;
     }
 
+
+
+    public boolean isStayTestResult() {
+        return StayTestResult;
+    }
+
+    public void setStayTestResult(boolean stayTestResult) {
+        StayTestResult = stayTestResult;
+    }
+
     private CountDownTimer mAccelTimer;
     private Queue<Double> ROLL_QUEUE;
     private Queue<Double> PITCH_QUEUE;
@@ -280,6 +296,22 @@ public class App {
 
     public void setmAccelBeaconDelayMap(Map<String, LinkedHashSet<String>> mAccelBeaconDelayMap) {
         this.mAccelBeaconDelayMap = mAccelBeaconDelayMap;
+    }
+
+    public boolean isLeftTestResult() {
+        return LeftTestResult;
+    }
+
+    public void setLeftTestResult(boolean leftTestResult) {
+        LeftTestResult = leftTestResult;
+    }
+
+    public boolean isRightTestResult() {
+        return RightTestResult;
+    }
+
+    public void setRightTestResult(boolean rightTestResult) {
+        RightTestResult = rightTestResult;
     }
 
     // ======== private 생성자 ========
@@ -533,8 +565,34 @@ public class App {
         this.mAccelBeaconMap = mAccelBeaconMap;
     }
 
-    //서비스가 시작했다면 타이머 시작
+    public boolean isPassiveCheck() {
+        this.passiveCheck = sharedPreferences.getBoolean("passive_check", false);
+        return passiveCheck;
+    }
 
+    public void setPassiveCheck(boolean passiveCheck) {
+        this.passiveCheck = passiveCheck;
+        sharedPreferences.edit().putBoolean("passive_check", passiveCheck).apply();
+    }
+
+    public String getSensorTestMode() {
+        this.TestSensorMode = sharedPreferences.getString("sensor_test_mode", "테스트");
+        return TestSensorMode;
+    }
+
+
+    public void setSensorTestMode(String TestSensorMode) {
+        this.TestSensorMode = TestSensorMode;
+        sharedPreferences.edit().putString("sensor_test_mode", TestSensorMode).apply();
+    }
+    //서비스가 시작했다면 타이머 시작
+    public void resetDelayList() {
+        if (saveDelayList == null) {
+            saveDelayList = new LinkedHashSet<>();
+        } else {
+            saveDelayList.clear();
+        }
+    }
 
 
 
