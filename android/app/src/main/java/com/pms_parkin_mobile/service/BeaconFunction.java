@@ -52,7 +52,7 @@ public class BeaconFunction {
     public void ChangeBeacon(int major, int minor, double rssi, SaveArrayListValue saveArrayListValue) {
 
 
-        if (App.getInstance().isStartFlag()) {
+        if (App.getInstance().isParkingStartFlag()) {
             String id;
 
             if (minor > 32768) {

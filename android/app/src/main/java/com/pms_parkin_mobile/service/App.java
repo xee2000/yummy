@@ -56,7 +56,10 @@ public class App {
     private boolean LeftTestResult = false;
     private boolean RightTestResult = false;
     private String TestSensorMode = "";
+    private String parkingCar = "";
+    private boolean TestStartFlag = false;
 
+    private AccelBeacon parkingBeaconId;
     public int getSAVE_DELAY() {
         return SAVE_DELAY;
     }
@@ -108,6 +111,8 @@ public class App {
     private ArrayList<Total> mTotalArrayList;
     private Total pendingTotal;
     private boolean passiveCheck;
+    private boolean sensorTestAllPassed = false;
+    private boolean parkingStartFlag = false;
 
     public LinkedHashSet<String> SetDelayList(String value){
         saveDelayList.add(value);
@@ -164,15 +169,7 @@ public class App {
     private int mAccelSequence = 0;
     private String mParingStateValue = "non-paring";
 
-    public boolean isStartFlag() {
-        startFlag = sharedPreferences.getBoolean("start_flag", false);
-        return startFlag;
-    }
 
-    public void setStartFlag(boolean startFlag) {
-        sharedPreferences.edit().putBoolean("start_flag", startFlag).apply();
-        this.startFlag = startFlag;
-    }
 
     public String getmParingStateValue() {
         return mParingStateValue;
@@ -594,7 +591,49 @@ public class App {
         }
     }
 
+    public boolean isTestStartFlag() {
+        return TestStartFlag;
+    }
 
+    public void setTestStartFlag(boolean testStartFlag) {
+        TestStartFlag = testStartFlag;
+    }
 
+    public boolean isSensorTestAllPassed() {
+        return this.sensorTestAllPassed;
+    }
 
+    public void setSensorTestAllPassed(boolean sensorTestAllPassed) {
+        this.sensorTestAllPassed = sensorTestAllPassed;
+    }
+
+    public void updateSensorTestAllPassed() {
+        if(isStayTestResult() && isLeftTestResult() && isRightTestResult()) {
+            this.sensorTestAllPassed = true;
+        }
+    }
+
+    public String getParkingCar() {
+        return parkingCar;
+    }
+
+    public void setParkingCar(String parkingCar) {
+        this.parkingCar = parkingCar;
+    }
+
+    public boolean isParkingStartFlag() {
+        return parkingStartFlag;
+    }
+
+    public void setParkingStartFlag(boolean parkingStartFlag) {
+        this.parkingStartFlag = parkingStartFlag;
+    }
+
+    public AccelBeacon getParkingBeaconId() {
+        return parkingBeaconId;
+    }
+
+    public void setParkingBeaconId(AccelBeacon parkingBeaconId) {
+        this.parkingBeaconId = parkingBeaconId;
+    }
 }

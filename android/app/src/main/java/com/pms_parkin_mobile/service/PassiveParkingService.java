@@ -119,6 +119,7 @@ public class PassiveParkingService {
         if (strongest != null) {
             Log.d(TAG, "parkingEnd: strongest beacon = " +
                     strongest.getBeaconId() + ", RSSI=" + bestRssi);
+
         } else {
             Log.d(TAG, "parkingEnd: no beacon with valid RSSI");
         }

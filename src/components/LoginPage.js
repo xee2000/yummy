@@ -141,6 +141,7 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
+      // ✅ (예시) 로그인 성공했다고 가정한 user
       const user = {
         id: 1234,
         dong: '101',
@@ -153,9 +154,19 @@ const LoginPage = () => {
         user_pwd: 'test',
         building_id: 1,
       };
+
+      // ✅ 1) 스토리지 저장
+      await EncryptedStorage.setItem('user', JSON.stringify(user));
+
+      // ✅ 2) 네이티브 서비스로도 전달(기존 유지)
       AndroidModule.startUserIntentService(JSON.stringify(user));
       AndroidModule.StartApplication();
+
+      // ✅ 3) 이동
       navigation.navigate('HomeTabs');
+    } catch (e) {
+      console.warn('[Login] store/login error:', e);
+      Alert.alert('로그인 실패', '로그인 처리 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,6 @@
 package com.pms_parkin_mobile.service;
 
+import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -275,12 +276,11 @@ public class BleScanner extends Service implements BeaconConsumer, SensorEventLi
 
 
                 Log.d(TAG, "App.getInstance().isServiceFlag(): " + App.getInstance().isServiceFlag());
-                Log.d(TAG, "App.getInstance().isStartFlag(): " + App.getInstance().isStartFlag());
                 //2번으로 시작하고 서비스사용여부가 켜짐이며 시작한적이 없을경우
 
 
                 //수동주차위치를 누르지 않은 상태일때만 들어오도록 한다.
-                if (minor == 2 && rssi >= -90 && App.getInstance().isServiceFlag() && !App.getInstance().isStartFlag() && !App.getInstance().isPassiveCheck()) {
+                if (minor == 2 && rssi >= -90 && App.getInstance().isServiceFlag() && !App.getInstance().isPassiveCheck()) {
                     Log.d(TAG, "Parking Service Start - major: " + major + ", minor: " + minor);
                     ParkingServiceStart();
                 }
@@ -300,7 +300,7 @@ public class BleScanner extends Service implements BeaconConsumer, SensorEventLi
                     PassiveParkingService.getInstance(context).parkingStart(hexValue, String.valueOf(rssi));
                 }
 
-                if(App.getInstance().isServiceFlag() && App.getInstance().isStartFlag()){
+                if(App.getInstance().isServiceFlag() && App.getInstance().isParkingStartFlag() && !App.getInstance().isPassiveCheck()){
                     String id;
                       Log.d("BleScanner" , "Start 이후에 데이터 확인");
                     if (minor > 32768) {
@@ -398,14 +398,19 @@ public class BleScanner extends Service implements BeaconConsumer, SensorEventLi
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (event == null || event.sensor == null) return;
-
+        if(App.getInstance().isPassiveCheck()){
+            return;
+        }
         if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+
             float[] v = event.values;
              Log.d(TAG, String.format("Accel: x=%.3f y=%.3f z=%.3f", v[0], v[1], v[2]));
+
             SensorActive.ReadAccel(event.values);
 
         } else if (event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
             float[] v = event.values;
+
             // Log.d(TAG, String.format("Gyro : x=%.3f y=%.3f z=%.3f", v[0], v[1], v[2]));
             SensorActive.ReadGyro(event.values);
         }
@@ -416,8 +421,15 @@ public class BleScanner extends Service implements BeaconConsumer, SensorEventLi
         // 필요 시 처리
     }
 
-    public static boolean isRunning() {
-        Boolean flag = App.getInstance().isServiceFlag();
-        return flag;
+    public static boolean isServiceRunning(Context context) {
+        ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+        if (am == null) return false;
+
+        for (ActivityManager.RunningServiceInfo s : am.getRunningServices(Integer.MAX_VALUE)) {
+            if (BleScanner.class.getName().equals(s.service.getClassName())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

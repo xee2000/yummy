@@ -46,14 +46,11 @@ const Option = ({ navigation }) => {
           // ServiceCheck() → { sensor_status: boolean, service_status: boolean } 형태라고 가정
           const res = await AndroidModule.ServiceCheck();
           // 방어코드: key casing/타입이 다를 수도 있으니 boolean 변환
-          const sOk =
-            typeof res?.sensor_status === 'boolean'
-              ? res.sensor_status
-              : !!res?.sensor_status;
-          const svc =
-            typeof res?.service_status === 'boolean'
-              ? res.service_status
-              : !!res?.service_status;
+          const sOk = typeof res?.sensor_test === 'boolean';
+
+          const svcRaw = res?.service_flag;
+
+          const svc = typeof svcRaw === 'boolean' ? svcRaw : !!svcRaw;
 
           setSensorOk(sOk);
           setServiceEnabled(svc);

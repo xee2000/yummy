@@ -51,11 +51,22 @@ public class TimerSingleton {
         }
         return instance;
     }
+    public void resetTimer(){
+        if(mWholeTimer != null){
+            mWholeTimer.cancel();
+        }
+        if(mAfterStartCountDownTimer != null){
+            mAfterStartCountDownTimer.cancel();
+        }
+        if(mAccelTimer != null){
+            mAccelTimer.cancel();
+        }
+    }
 
     public void StartWholeTimer() {
 
-
-        App.getInstance().setStartFlag(true);
+        //앱의 주차시작 여부를 판단하는 플래그
+        App.getInstance().setParkingStartFlag(true);
         Log.d("TIMER", "타이머 시작");
         int Delay = 900 * 1000;
         AfterStartTIMER();
@@ -132,14 +143,14 @@ public class TimerSingleton {
                         if (mWholeTimer != null) {
                             mWholeTimer.cancel();  // ✅ 즉시 멈춤 (onFinish는 호출 안 됨)
                             mWholeTimer = null;    // 선택: 다시 사용할 때 새로 만들기 위함
-                            App.getInstance().setStartFlag(false);
+                            App.getInstance().setParkingStartFlag(false);
                         }
                     }else{
                         RestController.getInstance().parking(App.getInstance().getUserId(), App.getInstance().getDong(), App.getInstance().getHo(), total, new Callback<Void>() {
                             @Override
                             public void onResponse(Call<Void> call, Response<Void> response) {
                                 Log.d("Success1", "response : " + response.message());
-                                App.getInstance().setStartFlag(false);
+                                App.getInstance().setParkingStartFlag(false);
                             }
 
                             @Override
@@ -197,7 +208,7 @@ public class TimerSingleton {
                                 public void onResponse(Call<Void> call, Response<Void> response) {
                                     Log.d("Success2", "response : " + response.message());
                                     ParkingAlarm(App.getInstance().getContext());
-                                    App.getInstance().setStartFlag(false);
+                                    App.getInstance().setParkingStartFlag(false);
                                 }
 
                                 @Override
@@ -217,7 +228,7 @@ public class TimerSingleton {
 
                     // 1번 로비비콘을 통해서 끝날 시 mOutParking = true가 되는데 이곳은 비컨이 30초 동안 들어오지 않은 상태이므로 false로 변경
                     // 전체 타이머가 돌고있을 경우 전체 타이머 종료
-                    if (App.getInstance().isStartFlag()) {
+                    if (App.getInstance().isParkingStartFlag()) {
                         try {
                             mWholeTimer.onFinish();
                             mWholeTimer.cancel();
@@ -359,7 +370,7 @@ public class TimerSingleton {
                         App.getInstance().setmPreState(accelResult);
                     }
 
-                    if (App.getInstance().isStartFlag()) {
+                    if (App.getInstance().isParkingStartFlag()) {
                         AccelSensor accelSensor = new AccelSensor();
                         accelSensor.setState(accelResult);
                         accelSensor.setSeq(String.valueOf(App.getInstance().getmAccelSequence()));
