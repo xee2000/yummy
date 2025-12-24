@@ -110,7 +110,8 @@ const LoginPage = () => {
       if (Platform.OS !== 'android') return;
 
       try {
-        const hasAll = await AndroidModule.hasAllPrimaryPermissions();
+        // ✅ 네이티브: CheckPermissionsStatus() 먼저 확인
+        const hasAll = await AndroidModule.CheckPermissionsStatus();
         setShowPermModal(!hasAll); // 권한 없으면 true, 있으면 false
       } catch (e) {
         // 체크 실패 시 안전하게 모달 띄움
@@ -119,20 +120,37 @@ const LoginPage = () => {
     };
 
     checkPermissions();
-  }, [AndroidModule]);
+  }, []); // ✅ AndroidModule을 deps에 넣지 말고 1회만
 
-  // ✅ “허용하기” → 네이티브 묶음 권한 요청
-  const handleAgreePermissions = () => {
-    setShowPermModal(false);
-
-    if (Platform.OS === 'android') {
-      try {
-        AndroidModule.requestAllPrimaryPermissions();
-      } catch (e) {
-        Alert.alert('권한 요청 실패', String(e));
-      }
-    } else {
+  // ✅ “허용하기” → (1) 다시 체크 (2) 없으면 PermissionCheck()로 요청
+  const handleAgreePermissions = async () => {
+    if (Platform.OS !== 'android') {
       Alert.alert('권한 안내', 'iOS 권한은 설정에서 허용할 수 있어요.');
+      return;
+    }
+
+    try {
+      // ✅ 이미 허용 상태면 요청/팝업 닫기
+      const hasAll = await AndroidModule.CheckPermissionsStatus();
+      if (hasAll) {
+        setShowPermModal(false);
+        return;
+      }
+
+      // ✅ 시스템 권한 다이얼로그 띄우기
+      const granted = await AndroidModule.PermissionCheck();
+
+      // ✅ 결과 반영
+      setShowPermModal(!granted);
+      if (!granted) {
+        Alert.alert(
+          '권한 필요',
+          '권한을 허용해야 앱 기능을 정상적으로 사용할 수 있어요.',
+        );
+      }
+    } catch (e) {
+      Alert.alert('권한 요청 실패', String(e?.message ?? e));
+      setShowPermModal(true);
     }
   };
 

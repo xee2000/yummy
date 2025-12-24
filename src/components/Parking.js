@@ -61,6 +61,9 @@ const Parking = () => {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // ✅ 도면(이미지) 조작 중에는 pull-to-refresh 비활성화
+  const [refreshEnabled, setRefreshEnabled] = useState(true);
+
   const loadDongHo = useCallback(async () => {
     try {
       const userData = await EncryptedStorage.getItem('user');
@@ -143,6 +146,9 @@ const Parking = () => {
   );
 
   const onRefresh = async () => {
+    // ✅ 도면 조작 중엔 새로고침 무시
+    if (!refreshEnabled) return;
+
     setRefreshing(true);
     await fetchParkingList({ silent: true });
     setRefreshing(false);
@@ -157,7 +163,6 @@ const Parking = () => {
       lastParkingTime: item.lastParkingTime ?? null,
     };
 
-    // ✅ 훅 쓰지 말고 그냥 계산
     const timeKST = formatKST(item.lastParkingTime);
 
     return (
@@ -170,7 +175,14 @@ const Parking = () => {
 
         <Text style={styles.timeText}>마지막 주차: {timeKST}</Text>
 
-        <ParkingLocation selectedCar={item.carNumber} deviceLoc={deviceLoc} />
+        <ParkingLocation
+          selectedCar={item.carNumber}
+          deviceLoc={deviceLoc}
+          // ✅ 도면 터치/드래그/핀치 시작하면 refresh 비활성화
+          onInteractingChange={isInteracting => {
+            setRefreshEnabled(!isInteracting);
+          }}
+        />
       </View>
     );
   };
@@ -192,7 +204,11 @@ const Parking = () => {
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            enabled={refreshEnabled} // ✅ 핵심: 도면 조작 중엔 pull-to-refresh OFF
+          />
         }
         ListEmptyComponent={
           !loading ? (

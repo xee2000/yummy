@@ -17,6 +17,8 @@ import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.modules.core.PermissionAwareActivity;
+import com.facebook.react.modules.core.PermissionListener;
 import com.pms_parkin_mobile.dto.AccelBeacon;
 import com.pms_parkin_mobile.service.App;
 import com.pms_parkin_mobile.service.BleScanner;
@@ -341,4 +343,44 @@ public class AndroidModule extends ReactContextBaseJavaModule {
             promise.reject("PASSIVE_PARKING_END_ERROR", e);
         }
     }
+
+    @ReactMethod
+    public void CheckPermissionsStatus(final Promise promise) {
+        try {
+            final ReactApplicationContext ctx = getReactApplicationContext();
+            boolean allGranted = PermissionManager.hasAllPermissions(ctx);
+            promise.resolve(allGranted);
+        } catch (Exception e) {
+            promise.reject("CHECK_PERMISSION_ERROR", e.getMessage());
+        }
+    }
+
+    @ReactMethod
+    public void PermissionCheck(final Promise promise) {
+        final ReactApplicationContext ctx = getReactApplicationContext();
+
+        // 이미 모두 허용됨
+        if (PermissionManager.hasAllPermissions(ctx)) {
+            promise.resolve(true);
+            return;
+        }
+
+        final Activity a = getCurrentActivity();
+
+
+        final String[] perms = PermissionManager.getRuntimePermissions();
+        PermissionAwareActivity paa = (PermissionAwareActivity) a;
+
+        paa.requestPermissions(perms, PermissionManager.REQUEST_CODE_ALL, new PermissionListener() {
+            @Override
+            public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+                // 콜백 반환 후 더 이상 RN가 기본 처리하지 않아도 됨을 표시하기 위해 true 리턴
+                boolean allGranted = PermissionManager.hasAllPermissions(ctx);
+                Log.d("AndroidModule", "Permission check result: " + allGranted);
+                promise.resolve(allGranted);
+                return true;
+            }
+        });
+    }
+
 }

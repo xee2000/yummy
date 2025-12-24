@@ -21,6 +21,7 @@ import java.util.List;
 /** 런타임 권한 유틸 (OS별 분기 + BG Location 분리) */
 public final class PermissionManager {
     private PermissionManager() {}
+    public static final int REQUEST_CODE_ALL = 1001;
 
     public static final int REQ_RUNTIME_PERMS = 1001;
     public static final int REQ_BG_LOCATION  = 1002;
@@ -43,12 +44,6 @@ public final class PermissionManager {
         return fine || coarse;
     }
 
-    /** 백그라운드 위치: API < 29 에서는 의미 없음(항상 true) */
-    public static boolean hasBackgroundLocation(@NonNull Context ctx) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true;
-        return ContextCompat.checkSelfPermission(ctx,
-                Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED;
-    }
 
     /** Android 12+ 근거리 디바이스 스캔(블루투스 스캔) */
     public static boolean hasNearbyScan(@NonNull Context ctx) {
@@ -96,50 +91,6 @@ public final class PermissionManager {
         }
     }
 
-    /**
-     * 백그라운드 위치는 **전경 위치 승인 후**에 별도로 요청해야 함.
-     * - API 29(Q): 다이얼로그로 직접 요청 가능
-     * - API 30+(R): 같은 화면에서 직접 승인되기 어려워 설정 이동이 필요할 수 있음
-     */
-    public static void requestBackgroundLocation(@NonNull Activity activity) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return; // 의미 없음
-        if (!hasLocationPermissions(activity)) return; // 전경 먼저!
-
-        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
-            // Android 10: 다이얼로그 요청 가능
-            ActivityCompat.requestPermissions(
-                    activity,
-                    new String[]{ Manifest.permission.ACCESS_BACKGROUND_LOCATION },
-                    REQ_BG_LOCATION
-            );
-        } else {
-            // Android 11+ : 설정 화면으로 유도 (권장)
-            openAppLocationSettings(activity);
-        }
-    }
-
-    /* ---------- 배터리 최적화 무시 ---------- */
-    public static void requestIgnoreBatteryOptimization(@NonNull Context context) {
-        try {
-            PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-            if (pm != null && !pm.isIgnoringBatteryOptimizations(context.getPackageName())) {
-                Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                i.setData(Uri.parse("package:" + context.getPackageName()));
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                context.startActivity(i);
-            }
-        } catch (Throwable ignored) {}
-    }
-
-    /* ---------- 설정 이동 헬퍼 ---------- */
-
-    /** 앱 알림 설정 화면 */
-    public static void openNotificationSettings(@NonNull Context ctx) {
-        Intent i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.getPackageName())
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        ctx.startActivity(i);
-    }
 
     /** 앱의 위치 권한 상세 화면(설정) */
     public static void openAppLocationSettings(@NonNull Context ctx) {
@@ -158,4 +109,40 @@ public final class PermissionManager {
                 && hasNearbyScan(ctx)
                 && hasNearbyConnect(ctx);
     }
+
+    @NonNull
+    public static String[] getRuntimePermissions() {
+        List<String> list = new ArrayList<>();
+
+        // 위치(런타임): 필요에 따라 FINE 또는 COARSE만 넣어도 됨.
+        // BLE 스캔/정밀 위치가 필요하면 FINE 권장
+        list.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        // list.add(Manifest.permission.ACCESS_COARSE_LOCATION); // COARSE만 쓸 거면 FINE 대신 이걸로
+
+        // Android 12+(S)부터 블루투스 런타임 권한 필요
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            list.add(Manifest.permission.BLUETOOTH_SCAN);
+            list.add(Manifest.permission.BLUETOOTH_CONNECT);
+        }
+
+        // Android 13+(T)부터 알림 런타임 권한 필요
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            list.add(Manifest.permission.POST_NOTIFICATIONS);
+        }
+
+        return list.toArray(new String[0]);
+    }
+
+    public static boolean hasAllPermissions(@NonNull Context context) {
+        for (String perm : getRuntimePermissions()) {
+            if (ContextCompat.checkSelfPermission(context, perm)
+                    != PackageManager.PERMISSION_GRANTED) {
+
+                return false;
+            }
+        }
+        return true;
+    }
+
+
 }
