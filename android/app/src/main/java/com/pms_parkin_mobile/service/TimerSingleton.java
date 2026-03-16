@@ -63,6 +63,7 @@ public class TimerSingleton {
         }
     }
 
+    //비컨을 키게 되면 시작되는 함수
     public void StartWholeTimer() {
 
         //앱의 주차시작 여부를 판단하는 플래그

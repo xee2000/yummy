@@ -346,7 +346,6 @@ public class BleScanner extends Service implements BeaconConsumer, SensorEventLi
         }
     }
 
-    //서비스 시작시 1씩 증가하도록 한다
     private void ParkingServiceStart() {
         //서비스가 시작현경우 상태를 true로 활성화해준다
         Log.d(TAG, "ParkingServiceStart() 호출");

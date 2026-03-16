@@ -136,6 +136,7 @@ const Home = () => {
     }
 
     try {
+      //주차 수동방식
       // ✅ PUT /app/updateParkingLocation (RequestParam)
       await RestApi.put('/app/updateParkingLocation', null, {
         params: {
@@ -212,6 +213,7 @@ const Home = () => {
       try {
         let res;
 
+        //차량을 가져오는 api
         // 1차: /app/carInfo
         try {
           res = await RestApi.get('/app/carInfo', {
