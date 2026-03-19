@@ -21,6 +21,9 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
 
+import lombok.Data;
+
+@Data
 public class App {
     // ======== 싱글톤 인스턴스 ========
     private static App instance;
@@ -44,6 +47,7 @@ public class App {
     private boolean sensorStatus;
     private boolean testFlag;
     private boolean serviceStatus;
+    private int AfterLobbyEleCount=0;
     private int beaconMajor;
     private String mPreState = null;
     private int beaconMinor;
@@ -58,6 +62,8 @@ public class App {
     private String TestSensorMode = "";
     private String parkingCar = "";
     private boolean TestStartFlag = false;
+    //수동 문열림 플래그
+    private boolean passOpenLobbyFlag = false;
 
     private AccelBeacon parkingBeaconId;
     public int getSAVE_DELAY() {
@@ -420,6 +426,7 @@ public class App {
         buildingId = 0;
         latitude = 0;
         longitude = 0;
+        AfterLobbyEleCount=0;
     }
 
     // ======== Getter ========

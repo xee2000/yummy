@@ -15,7 +15,7 @@ const ZOOM_IN_SCALE = 1.5; // ✅ 50% 줌인
 const ZOOM_IN_DURATION = 280; // ✅ 줌인 애니메이션 시간(ms)
 
 const FLOOR_CALIB = {
-  B1: {
+  P1: {
     minX: 1480,
     minY: 1420,
     maxX: 6000,
@@ -25,9 +25,9 @@ const FLOOR_CALIB = {
 };
 
 const CAR_CONFIG = {
-  test1234: { image: require('../assets/B1.png') },
-  test5678: { image: require('../assets/B1.png') },
-  test9012: { image: require('../assets/B1.png') },
+  test1234: { image: require('../assets/P1.png') },
+  test5678: { image: require('../assets/P1.png') },
+  test9012: { image: require('../assets/P1.png') },
 };
 
 function getFloorKey(floor) {
@@ -37,7 +37,7 @@ function getFloorKey(floor) {
     floor?.floorName ||
     floor?.id ||
     floor?.floor_id ||
-    'B1'
+    'P1'
   );
 }
 
@@ -66,7 +66,7 @@ const PassParkingLocation = ({ selectedCar, deviceLoc, visible, focusKey }) => {
 
   const cfg = useMemo(() => {
     if (selectedCar && CAR_CONFIG[selectedCar]) return CAR_CONFIG[selectedCar];
-    return { image: require('../assets/B1.png') };
+    return { image: require('../assets/P1.png') };
   }, [selectedCar]);
 
   const [layoutSize, setLayoutSize] = useState({ width: 0, height: 0 });

@@ -1,27 +1,40 @@
 package com.pms_parkin_mobile.service;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import com.pms_parkin_mobile.api.RestController;
+import com.pms_parkin_mobile.api.SimpleCallback;
 import com.pms_parkin_mobile.dataManager.SaveArrayListValue;
 import com.pms_parkin_mobile.dto.Beacon;
+import com.pms_parkin_mobile.dto.LobbyOpenData;
+import com.pms_parkin_mobile.dto.User;
+import com.pms_parkin_mobile.foreground.OpenLobbyAlarm;
 import com.pms_parkin_mobile.util.Hex;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.Timer;
 import java.util.TreeSet;
 
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
 public class BeaconFunction {
-    private final TimerSingleton mTimerSingleton;
-    private final Context mContext;
 
-    public BeaconFunction(Context context) {
-        this.mContext = context;
+    private static BeaconFunction instance;
 
-        mTimerSingleton = TimerSingleton.getInstance();
+    public static BeaconFunction getInstance() {
+        if (instance == null) {
+            instance = new BeaconFunction();
+        }
+        return instance;
     }
 
     // 입구 비컨
@@ -45,8 +58,114 @@ public class BeaconFunction {
      **/
     // 로비 비컨
 
+    public void OnlyOpenLobby(int minor, int major, double rssi, Context context) {
+        // 1. 데이터 리스트 가져오기
+        ArrayList<LobbyOpenData> lobbyOpenData = UserDataSingleton.getInstance().getOpenMINOR();
 
-    // 엘리베이터 비컨
+        Log.d("TEST", "user : " + UserDataSingleton.getInstance().getUserId() + " : " + lobbyOpenData);
+        // 방어 코드: 리스트가 null이면 실행 중단
+        if (lobbyOpenData == null) {
+
+            // 2. OPEN 초기화 요청 (Callback 선언 문법 수정: new 키워드 추가)
+            RestController.getInstance().openLobbyDataNull(UserDataSingleton.getInstance().getUserId(), new Callback<Void>() {
+                @Override
+                public void onResponse(Call<Void> call, Response<Void> response) {
+                    Log.d("TEST", "openLobby data null");
+                }
+
+                @Override
+                public void onFailure(Call<Void> call, Throwable t) {
+                    Log.e("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 초기화 요청 실패 : " + t.getMessage());
+                }
+            });
+
+
+            Log.e("Ble", "LobbyOpenData list is null");
+            return;
+        }
+
+        // openLobby 데이터 null
+        RestController.getInstance().openLobbyinit(UserDataSingleton.getInstance().getUserId(), new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, Response<Void> response) {
+                Log.d("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 초기화 요청 : " + response.isSuccessful());
+            }
+
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                Log.e("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 초기화 요청 실패 : " + t.getMessage());
+            }
+        });
+
+        // 3. 루프를 돌며 Minor 값 비교
+        String minorHex = String.format("%04X", minor); // 현재 스캔된 Minor (Hex)
+
+        for (int i = 0; i < lobbyOpenData.size(); i++) {
+            LobbyOpenData data = lobbyOpenData.get(i);
+            String lobbyMinor = data.getMinor();
+
+            // RSSI 값 변환 시 발생할 수 있는 NumberFormatException 예외 처리 권장
+            double targetRssi;
+            try {
+                targetRssi = Double.parseDouble(data.getRssi());
+            } catch (Exception e) {
+                targetRssi = -100.0; // 기본값
+            }
+
+            // 비교 로직 (문자열 비교는 equalsIgnoreCase 권장)
+            if (minorHex.equalsIgnoreCase(lobbyMinor)) {
+
+                // RSSI 강도가 기준치보다 높을 때만 실행
+                if (rssi >= targetRssi) {
+                    LobbyOpenData newdata = new LobbyOpenData();
+                    newdata.setMinor(lobbyMinor);
+                    newdata.setRssi(String.valueOf(rssi));
+                    newdata.setDong(UserDataSingleton.getInstance().getDong());
+                    newdata.setHo(UserDataSingleton.getInstance().getHo());
+                    newdata.setId(UserDataSingleton.getInstance().getUserId());
+
+                    Log.d("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 요청 시도: " + lobbyMinor);
+
+                    RestController.getInstance().openLobby(newdata, new Callback<Void>() {
+                        // OnlyOpenLobby 메서드 내부의 onResponse 콜백 부분 수정
+                        @Override
+                        public void onResponse(Call<Void> call, Response<Void> response) {
+                            Log.d("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 요청 결과: " + response.isSuccessful() + ", RSSI: " + rssi);
+
+                            if (response.isSuccessful()) {
+                                // ✅ App.getInstance()는 Application을 상속받으므로 Context로 사용 가능합니다.
+                                Intent intent = new Intent(context, OpenLobbyAlarm.class);
+
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    // 안드로이드 8.0 이상은 startForegroundService를 호출해야 함
+                                    context.startForegroundService(intent);
+                                } else {
+                                    context.startService(intent);
+                                }
+                            }
+                        }
+
+                        @Override
+                        public void onFailure(Call<Void> call, Throwable t) {
+                            Log.e("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 요청 실패 : " + t.getMessage());
+                        }
+                    });
+                }else{
+                    RestController.getInstance().openLobbyRssiFail(UserDataSingleton.getInstance().getUserId(), new Callback<Void>() {
+                        @Override
+                        public void onResponse(Call<Void> call, Response<Void> response) {
+                            Log.d("TEST", "rssi Fail api : " + response.isSuccessful());
+                        }
+
+                        @Override
+                        public void onFailure(Call<Void> call, Throwable t) {
+                            Log.e("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 초기화 요청 실패 : " + t.getMessage());
+                        }
+                    });
+                }
+            }
+        }
+    }
 
 
     public void ChangeBeacon(int major, int minor, double rssi, SaveArrayListValue saveArrayListValue) {

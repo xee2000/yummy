@@ -58,11 +58,27 @@
             <service android:name=".foreground.AppRunning3"
                 android:enabled="true"
                 android:exported="true"
-                android:permission="android.permission.FOREGROUND_SERVICE"
                 android:foregroundServiceType="location"
                 tools:ignore="ForegroundServicePermission">
             </service>
+
+            <service android:name=".foreground.OpenLobbyAlarm"
+                android:enabled="true"
+                android:exported="true"
+                android:foregroundServiceType="location"
+                tools:ignore="ForegroundServicePermission">
+            </service>
+
+            <receiver
+                android:name="com.pms_parkin_mobile.receiver.NotificationActionReceiver"
+                android:enabled="true"
+                android:exported="false">
+                <intent-filter>
+                    <action android:name="com.pms_parkin_mobile.NOTIFICATION_DISMISSED" />
+                </intent-filter>
+            </receiver>
     </application>
+
 
 
 </manifest>

@@ -4,26 +4,22 @@ import ImageZoom from 'react-native-image-pan-zoom';
 
 const MARKER_SIZE = 28;
 
-const CAR_CONFIG = {
-  test1234: { image: require('../assets/B1.png'), marker: { x: 0.3, y: 0.35 } },
-  test5678: {
-    image: require('../assets/B1.png'),
-    marker: { x: 0.62, y: 0.48 },
-  },
-  test9012: { image: require('../assets/B1.png'), marker: { x: 0.78, y: 0.7 } },
+// ✅ MapId에 따른 이미지 매핑 (안드로이드 리소스 이름 기준)
+const MAP_IMAGES = {
+  P1: require('../assets/P1.png'),
+  P2_E: require('../assets/P2.png'),
+  P2_W: require('../assets/P5.png'),
+  P3_G: require('../assets/P3.png'),
+  P3_B: require('../assets/P4.png'),
+  default: require('../assets/P1.png'), // 예외 처리용
 };
 
-/**
- * props:
- * - selectedCar
- * - onInteractingChange?: (isInteracting: boolean) => void
- *   ✅ 도면 터치/드래그/핀치 중이면 true, 손 떼면 false (부모에서 새로고침 비활성화에 사용)
- */
-const ParkingLocation = ({ selectedCar, onInteractingChange }) => {
-  const cfg = useMemo(() => {
-    if (selectedCar && CAR_CONFIG[selectedCar]) return CAR_CONFIG[selectedCar];
-    return { image: require('../assets/B1.png'), marker: { x: 0.5, y: 0.5 } };
-  }, [selectedCar]);
+const ParkingLocation = ({ selectedCar, deviceLoc, onInteractingChange }) => {
+  // ✅ 1. MapId에 따른 이미지 결정
+  const bgImage = useMemo(() => {
+    if (!deviceLoc?.floor) return MAP_IMAGES.default;
+    return MAP_IMAGES[deviceLoc.floor] || MAP_IMAGES.default;
+  }, [deviceLoc?.floor]);
 
   const [layoutSize, setLayoutSize] = useState({ width: 0, height: 0 });
 
@@ -32,68 +28,76 @@ const ParkingLocation = ({ selectedCar, onInteractingChange }) => {
     setLayoutSize({ width, height });
   }, []);
 
-  // ✅ 도면 터치 중인지 (부모 RefreshControl 끄는 용도)
-  const [interacting, setInteracting] = useState(false);
   const setInteractingSafe = useCallback(
     v => {
-      setInteracting(v);
       if (typeof onInteractingChange === 'function') onInteractingChange(v);
     },
     [onInteractingChange],
   );
 
-  // ✅ contain 기준으로 실제 렌더된 이미지 영역 계산
-  const containInfo = useMemo(() => {
+  const calculateInfo = useMemo(() => {
     const { width, height } = layoutSize;
-    if (width <= 0 || height <= 0) return null;
-
-    const src = Image.resolveAssetSource(cfg.image);
-    const imgW = src?.width || 1;
-    const imgH = src?.height || 1;
-
-    const scale = Math.min(width / imgW, height / imgH);
-    const renderW = imgW * scale;
-    const renderH = imgH * scale;
-    const offsetX = (width - renderW) / 2;
-    const offsetY = (height - renderH) / 2;
-
-    return { imgW, imgH, scale, renderW, renderH, offsetX, offsetY };
-  }, [cfg.image, layoutSize]);
-
-  // ✅ 마커 위치(픽셀) + 초기 줌/이동값 계산
-  const { markerStyle, initialScale, initialPosition } = useMemo(() => {
-    const { width, height } = layoutSize;
-
-    if (!containInfo || width <= 0 || height <= 0) {
-      return {
-        markerStyle: [styles.markerImg, { left: 0, top: 0 }],
-        initialScale: 1,
-        initialPosition: { x: 0, y: 0 },
-      };
+    if (width <= 0 || height <= 0 || !deviceLoc) {
+      console.log('[Debug] Layout not ready or no deviceLoc');
+      return null;
     }
 
-    const zoom = 1.5; // ✅ 50% 줌인
-    const { renderW, renderH, offsetX, offsetY } = containInfo;
-    const { x, y } = cfg.marker;
+    // 1. 원본 도면 해상도
+    const ORIGINAL_IMAGE_W = 1572;
+    const ORIGINAL_IMAGE_H = 1146;
 
-    const markerCx = offsetX + x * renderW;
-    const markerCy = offsetY + y * renderH;
+    // 2. 스케일 계산 (contain 방식)
+    const scale = Math.min(width / ORIGINAL_IMAGE_W, height / ORIGINAL_IMAGE_H);
+    const renderW = ORIGINAL_IMAGE_W * scale;
+    const renderH = ORIGINAL_IMAGE_H * scale;
 
+    // 이미지 뷰 안에서 실제 이미지가 시작되는 지점 (중앙 정렬)
+    const offsetX = (width - renderW) / 2;
+    const offsetY = (height - renderH) / 2;
+    // 3. 목표 비율 (실측 데이터 804, 651 기준)
+    const xRatio = 804 / 1572; // 0.5114 -> 약 중앙 지점
+    const yRatio = 651 / 1146; // 0.5681 -> 약 중앙 하단 지점
+
+    // 4. 화면상의 마커 중심 좌표 (줌 전)
+    const markerCx = xRatio * renderW + offsetX;
+    const markerCy = yRatio * renderH + offsetY;
+
+    // 5. 최종 마커 위치 (절대 좌표)
     const left = markerCx - MARKER_SIZE / 2;
-    const top = markerCy - MARKER_SIZE / 2;
+    const top = markerCy - MARKER_SIZE;
 
+    // 6. 줌 및 포지션 계산
+    const zoom = 3.2;
     const posX = width / 2 - markerCx * zoom;
     const posY = height / 2 - markerCy * zoom;
 
-    return {
-      markerStyle: [
-        styles.markerImg,
-        { left, top, width: MARKER_SIZE, height: MARKER_SIZE },
-      ],
-      initialScale: zoom,
-      initialPosition: { x: posX, y: posY },
-    };
-  }, [cfg.marker, containInfo, layoutSize]);
+    // 🔍 로그 출력 (이 로그들을 복사해서 보여주세요)
+    console.log('--- Coordinate Debug Start ---');
+    console.log(`1. Layout (Viewport): ${width} x ${height}`);
+    console.log(
+      `2. Rendered Img: ${renderW.toFixed(2)} x ${renderH.toFixed(
+        2,
+      )} (Scale: ${scale.toFixed(4)})`,
+    );
+    console.log(
+      `3. Offset (Margin): X=${offsetX.toFixed(2)}, Y=${offsetY.toFixed(2)}`,
+    );
+    console.log(
+      `4. Target Ratio: X=${xRatio.toFixed(4)}, Y=${yRatio.toFixed(4)}`,
+    );
+    console.log(
+      `5. Marker Center: X=${markerCx.toFixed(2)}, Y=${markerCy.toFixed(2)}`,
+    );
+    console.log(
+      `6. Final Style: left=${left.toFixed(2)}, top=${top.toFixed(2)}`,
+    );
+    console.log(
+      `7. Zoom Position: posX=${posX.toFixed(2)}, posY=${posY.toFixed(2)}`,
+    );
+    console.log('--- Coordinate Debug End ---');
+
+    return { left, top, zoom, posX, posY };
+  }, [deviceLoc, layoutSize]);
 
   const { width, height } = layoutSize;
 
@@ -107,29 +111,33 @@ const ParkingLocation = ({ selectedCar, onInteractingChange }) => {
             imageWidth={width || 1}
             imageHeight={height || 1}
             minScale={1}
-            maxScale={5}
-            enableCenterFocus
-            pinchToZoom
-            enableDoubleClickZoom
-            scale={initialScale}
-            positionX={initialPosition.x}
-            positionY={initialPosition.y}
+            maxScale={10}
+            scale={calculateInfo?.zoom || 1}
+            positionX={calculateInfo?.posX || 0}
+            positionY={calculateInfo?.posY || 0}
           >
-            {width > 0 && height > 0 ? (
+            {width > 0 && calculateInfo ? (
               <View
-                // ✅ 도면 제스처 중에는 부모 pull-to-refresh 끄기 용도
                 onTouchStart={() => setInteractingSafe(true)}
                 onTouchEnd={() => setInteractingSafe(false)}
                 onTouchCancel={() => setInteractingSafe(false)}
               >
                 <Image
-                  source={cfg.image}
+                  source={bgImage}
                   style={{ width, height }}
                   resizeMode="contain"
                 />
                 <Image
                   source={require('../assets/parking.png')}
-                  style={markerStyle}
+                  style={[
+                    styles.markerImg,
+                    {
+                      left: calculateInfo.left,
+                      top: calculateInfo.top,
+                      width: MARKER_SIZE,
+                      height: MARKER_SIZE,
+                    },
+                  ]}
                   resizeMode="contain"
                 />
               </View>

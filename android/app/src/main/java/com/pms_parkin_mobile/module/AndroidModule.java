@@ -47,11 +47,18 @@ public class AndroidModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void StartApplication() {
         final Context ctx = getReactApplicationContext();
+        Intent serviceIntent = new Intent(ctx, BleScanner.class);
         ctx.startService(new Intent(ctx, UserIntent.class));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ctx.startForegroundService(serviceIntent);
+        } else {
+            ctx.startService(serviceIntent);
+        }
     }
 
     @ReactMethod
     public void startUserIntentService(String userData) {
+        Log.d("TEST" ,"user data : " + userData);
         Intent intent = new Intent(getReactApplicationContext(), UserIntent.class);
         intent.putExtra("user", userData);
         getReactApplicationContext().startService(intent);
@@ -243,29 +250,22 @@ public class AndroidModule extends ReactContextBaseJavaModule {
         return App.getInstance().isStayTestResult();
     }
 
-    /* =========================
-       이하 기존 코드 (그대로)
-       ========================= */
 
     @ReactMethod
     public void ServiceCheck(Promise promise) {
-        WritableMap map = Arguments.createMap();
-        Context ctx = getReactApplicationContext();
-        Boolean flag = BleScanner.isServiceRunning(ctx);
-        Log.d("SensorTest", "sensorTest : " + App.getInstance().isSensorTestAllPassed());
-        Log.d("SensorTest" , "ServiceFlag : " + App.getInstance().isServiceFlag());
-        map.putBoolean("sensor_test", App.getInstance().isSensorTestAllPassed());
-        map.putBoolean("service_flag", flag);
-
-        Log.d("TEST", "map : " + map.toString());
-        promise.resolve(map);
-    }
-
-    @ReactMethod
-    public void ServiceRunningCheck(Promise promise) {
         final Context ctx = getReactApplicationContext();
-        Boolean flag = BleScanner.isServiceRunning(ctx);
-        promise.resolve(flag);
+
+        boolean bleFlag = BleScanner.isServiceRunning(ctx);
+        boolean openLobbyFlag = App.getInstance().isPassOpenLobbyFlag();
+        Log.d("SERVICE_CHECK", "openLobbyFlag 서비스 상태: " + openLobbyFlag);
+
+        WritableMap map = Arguments.createMap();
+        map.putBoolean("Ble", bleFlag);
+        map.putBoolean("Lobby", openLobbyFlag);
+
+
+
+        promise.resolve(map);
     }
 
     @ReactMethod
@@ -354,6 +354,18 @@ public class AndroidModule extends ReactContextBaseJavaModule {
             promise.reject("CHECK_PERMISSION_ERROR", e.getMessage());
         }
     }
+
+    //자동 문열림 서비스 사용여부 on할경우
+    // 설정 > 자동 문열림 서비스 사용여부
+    @ReactMethod
+    public void passOpenLobbyFlag(Boolean flag) {
+        if(flag){
+            App.getInstance().setPassOpenLobbyFlag(true);
+        }else{
+            App.getInstance().setPassOpenLobbyFlag(false);
+        }
+    }
+
 
     @ReactMethod
     public void PermissionCheck(final Promise promise) {

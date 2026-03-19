@@ -84,7 +84,6 @@ const Parking = () => {
   const fetchParkingList = useCallback(
     async (opts = { silent: false }) => {
       if (dong == null || ho == null) return;
-
       if (!opts.silent) setLoading(true);
 
       try {
@@ -92,30 +91,31 @@ const Parking = () => {
           params: { dong: Number(dong), ho: Number(ho) },
         });
 
-        const data = res?.data ?? {};
+        // ✅ 서버 응답 데이터 확인: 데이터가 [Parking] data: [...] 형태라면 바로 사용
+        const data = res?.data ?? [];
         console.log('[Parking] data:', JSON.stringify(data));
 
-        const rows = Array.isArray(data?.result) ? data.result : [];
+        // 응답이 { result: [...] } 형태인지 그냥 [...] 형태인지에 따라 처리
+        const rows = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.result)
+          ? data.result
+          : [];
 
         const safe = rows
           .filter(r => r?.carNumber)
           .map(r => ({
             carNumber: r.carNumber,
-            x: r.x, // String
-            y: r.y, // String
-            mapId: r.mapId, // e.g. "B3"
-            area: r.area, // e.g. "A01"
-            lastParkingTime: r.lastParkingTime, // ISO string (UTC)
+            x: r.x, // "119"
+            y: r.y, // "52"
+            mapId: r.mapId, // "P1"
+            area: r.area, // 서버에 없다면 null
+            lastParkingTime: r.lastParkingTime, // "2026-02-17 13:50:31.0"
           }));
 
         setList(safe);
       } catch (e) {
-        console.warn('[Parking] fetchParkingList error:', {
-          message: e?.message,
-          status: e?.response?.status,
-          data: e?.response?.data,
-        });
-        Alert.alert('오류', '주차 위치 목록을 불러오지 못했습니다.');
+        // ... (에러 처리)
       } finally {
         if (!opts.silent) setLoading(false);
       }

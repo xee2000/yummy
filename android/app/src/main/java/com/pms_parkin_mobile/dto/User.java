@@ -24,13 +24,11 @@ public class User {
     public User(String jsonString) throws JSONException {
         JSONObject jsonObject = new JSONObject(jsonString);
         this.id = jsonObject.getInt("id");
-        this.userId = jsonObject.getString("user_id");
-        this.userPwd = jsonObject.getString("user_pwd");
+        this.userId = jsonObject.getString("userId");
         this.phone = jsonObject.getString("phone");
-        this.userName = jsonObject.getString("user_name");
+        this.userName = jsonObject.getString("alias");
         this.dong = jsonObject.getString("dong");
         this.ho = jsonObject.getString("ho");
-        this.buildingId = jsonObject.getInt("building_id");
     }
 
     // Getter 메서드

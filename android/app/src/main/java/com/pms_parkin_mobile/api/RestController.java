@@ -3,6 +3,7 @@ package com.pms_parkin_mobile.api;
 import android.util.Log;
 
 
+import com.pms_parkin_mobile.dto.LobbyOpenData;
 import com.pms_parkin_mobile.dto.Total;
 import com.pms_parkin_mobile.dto.User;
 
@@ -55,6 +56,26 @@ public class RestController {
     public void parking(String userId, String dong, String ho, Total total, Callback<Void> callback) {
         Log.d("RestController", "parking : " + userId);
         Call<Void> call = retrofitAPI.parking(userId,dong,ho, total);
+        call.enqueue(callback);
+    }
+
+    public void openLobby(LobbyOpenData lobbyOpenData, Callback<Void> callback) {
+        Call<Void> call = retrofitAPI.openLobby(lobbyOpenData.getId(), lobbyOpenData.getDong(), lobbyOpenData.getHo(), lobbyOpenData.getMinor(), lobbyOpenData.getRssi());
+        call.enqueue(callback);
+    }
+
+    public void openLobbyinit(String id, Callback<Void> callback) {
+        Call<Void> call = retrofitAPI.openLobbyinit(id);
+        call.enqueue(callback);
+    }
+
+    public void openLobbyDataNull(String id, Callback<Void> callback) {
+        Call<Void> call = retrofitAPI.openLobbyDataNull(id);
+        call.enqueue(callback);
+    }
+
+    public void openLobbyRssiFail(String id, Callback<Void> callback) {
+        Call<Void> call = retrofitAPI.openLobbyRssiFail(id);
         call.enqueue(callback);
     }
 }

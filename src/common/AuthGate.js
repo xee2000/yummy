@@ -1,6 +1,5 @@
-// src/screens/AuthGate.js
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import EncryptedStorage from 'react-native-encrypted-storage';
 import { useNavigation } from '@react-navigation/native';
 
@@ -8,43 +7,60 @@ export default function AuthGate() {
   const navigation = useNavigation();
 
   useEffect(() => {
-    (async () => {
+    const checkAuth = async () => {
       try {
         const raw = await EncryptedStorage.getItem('user');
+        console.log('[AuthGate] Retrieved user data:', raw);
 
         if (raw) {
-          // 유저 객체면 홈으로 (파싱 실패 방지)
           try {
             const user = JSON.parse(raw);
-            if (user && user.id) {
+
+            // ✅ 수정된 비교 로직: user 객체가 존재하고, name 필드에 값이 있는지 확인
+            // 로그 데이터 기준: {"name":"김두열", "dong":"2512", ...}
+            if (user && user.name && user.name.trim() !== '') {
+              console.log('[AuthGate] Valid user found, navigating to Home');
               navigation.reset({
                 index: 0,
                 routes: [{ name: 'HomeTabs' }],
               });
               return;
             }
-          } catch {
-            // 파싱 실패시 로그인으로
+          } catch (parseError) {
+            console.error('[AuthGate] JSON Parse Error:', parseError);
           }
         }
 
-        // 아무것도 없으면 로그인으로
+        // 유저 정보가 없거나 올바르지 않으면 로그인 화면으로
+        console.log('[AuthGate] No valid user, navigating to Login');
         navigation.reset({
           index: 0,
           routes: [{ name: 'Login' }],
         });
       } catch (e) {
+        console.error('[AuthGate] Storage Error:', e);
         navigation.reset({
           index: 0,
           routes: [{ name: 'Login' }],
         });
       }
-    })();
+    };
+
+    checkAuth();
   }, [navigation]);
 
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <ActivityIndicator />
+    <View style={styles.container}>
+      <ActivityIndicator size="large" color="#2563EB" />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+});

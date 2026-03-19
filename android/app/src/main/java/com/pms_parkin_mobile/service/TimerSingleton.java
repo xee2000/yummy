@@ -19,6 +19,8 @@ import com.pms_parkin_mobile.foreground.AppRunning3;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import lombok.Getter;
+import lombok.Setter;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -44,6 +46,10 @@ public class TimerSingleton {
     private boolean mNotStartBeaconStart = false;
     private static TimerSingleton instance;
     private Timer Collect_START_CALC_TIMER;
+    @Getter
+    @Setter
+    private boolean LobbyTimerStart=false;
+    private CountDownTimer LobbyTimer;
 
     public static TimerSingleton getInstance() {
         if (instance == null) {
@@ -164,6 +170,33 @@ public class TimerSingleton {
             }
         }.start();
     }
+
+    public void StartLobbyTimer()
+    {
+        Log.d("TIMER","StartLobbyTimer :");
+        int Delay=3*1000;
+
+        if(LobbyTimer!=null)
+            LobbyTimer=null;
+
+        LobbyTimerStart=true;
+
+        LobbyTimer=new CountDownTimer(Delay,1000)
+        {
+            @Override
+            public void onTick(long millisUntilFinished) {
+
+            }
+
+            @Override
+            public void onFinish() {
+                LobbyTimerStart=false;
+            }
+        }.start();
+    }
+
+
+
 
     public void START_CALC_TIMER() {
         if (COLLECT_START_BEACON_CALC) {
