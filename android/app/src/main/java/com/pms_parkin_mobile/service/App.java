@@ -119,6 +119,8 @@ public class App {
     private boolean passiveCheck;
     private boolean sensorTestAllPassed = false;
     private boolean parkingStartFlag = false;
+    private long passiveParkingEndTime = 0L;
+    private static final long PASSIVE_COOLDOWN_MS = 10 * 60 * 1000L;
 
     public LinkedHashSet<String> SetDelayList(String value){
         saveDelayList.add(value);
@@ -322,6 +324,7 @@ public class App {
         sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         this.appContext = context.getApplicationContext();
         loadUserInfo(); // 초기화 시 기존 저장된 값 불러오기
+        UserDataSingleton.getInstance().init(context);
     }
 
     public Context getContext() {
@@ -577,6 +580,25 @@ public class App {
     public void setPassiveCheck(boolean passiveCheck) {
         this.passiveCheck = passiveCheck;
         sharedPreferences.edit().putBoolean("passive_check", passiveCheck).apply();
+    }
+
+    public long getPassiveParkingEndTime() {
+        if (sharedPreferences == null) return 0L;
+        return sharedPreferences.getLong("passive_parking_end_time", 0L);
+    }
+
+    public void setPassiveParkingEndTime(long time) {
+        this.passiveParkingEndTime = time;
+        if (sharedPreferences != null) {
+            sharedPreferences.edit().putLong("passive_parking_end_time", time).apply();
+        }
+    }
+
+    // 수동 주차 종료 후 10분 이내이면 true
+    public boolean isPassiveCooldownActive() {
+        long endTime = getPassiveParkingEndTime();
+        if (endTime == 0L) return false;
+        return (System.currentTimeMillis() - endTime) < PASSIVE_COOLDOWN_MS;
     }
 
     public String getSensorTestMode() {

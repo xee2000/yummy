@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat;
 
 import com.pms_parkin_mobile.R;
 import com.pms_parkin_mobile.service.App;
+import com.pms_parkin_mobile.service.UserDataSingleton;
 
 
 public class AppRunning3 extends Service {
@@ -42,7 +43,7 @@ public class AppRunning3 extends Service {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.rn_edit_text_material)
                 .setContentTitle("주차위치서비스")
-                .setContentText(App.getInstance().getUserId() +"님 주차가 완료되었습니다.")
+                .setContentText(UserDataSingleton.getInstance().getUserName() +"님 주차가 완료되었습니다.")
                 .setOngoing(true)
                 .setAutoCancel(false);
 

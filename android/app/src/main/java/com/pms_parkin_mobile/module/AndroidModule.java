@@ -46,6 +46,7 @@ public class AndroidModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void StartApplication() {
+        Log.d("AndroidModule", "StartApplication called");
         final Context ctx = getReactApplicationContext();
         Intent serviceIntent = new Intent(ctx, BleScanner.class);
         ctx.startService(new Intent(ctx, UserIntent.class));
@@ -58,6 +59,14 @@ public class AndroidModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void startUserIntentService(String userData) {
+        Log.d("TEST" ,"user data : " + userData);
+        Intent intent = new Intent(getReactApplicationContext(), UserIntent.class);
+        intent.putExtra("user", userData);
+        getReactApplicationContext().startService(intent);
+    }
+
+    @ReactMethod
+    public void AppRestartIntent(String userData) {
         Log.d("TEST" ,"user data : " + userData);
         Intent intent = new Intent(getReactApplicationContext(), UserIntent.class);
         intent.putExtra("user", userData);
@@ -255,16 +264,27 @@ public class AndroidModule extends ReactContextBaseJavaModule {
     public void ServiceCheck(Promise promise) {
         final Context ctx = getReactApplicationContext();
 
-        boolean bleFlag = BleScanner.isServiceRunning(ctx);
+        boolean bleRunning = BleScanner.isServiceRunning(ctx);
+        boolean serviceFlag = App.getInstance().isServiceFlag();
+
+        // serviceFlag가 true인데 서비스가 꺼져 있으면 (앱 재시작 등) 자동으로 재시작
+        if (serviceFlag && !bleRunning) {
+            Log.d("SERVICE_CHECK", "serviceFlag=true 이지만 서비스 미실행 → 재시작");
+            Intent restartIntent = new Intent(ctx, BleScanner.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(ctx, restartIntent);
+            } else {
+                ctx.startService(restartIntent);
+            }
+            bleRunning = true;
+        }
+
         boolean openLobbyFlag = App.getInstance().isPassOpenLobbyFlag();
-        Log.d("SERVICE_CHECK", "openLobbyFlag 서비스 상태: " + openLobbyFlag);
+        Log.d("SERVICE_CHECK", "bleRunning=" + bleRunning + " serviceFlag=" + serviceFlag + " lobbyFlag=" + openLobbyFlag);
 
         WritableMap map = Arguments.createMap();
-        map.putBoolean("Ble", bleFlag);
+        map.putBoolean("Ble", bleRunning);
         map.putBoolean("Lobby", openLobbyFlag);
-
-
-
         promise.resolve(map);
     }
 
@@ -316,6 +336,8 @@ public class AndroidModule extends ReactContextBaseJavaModule {
         App.getInstance().setParkingCar(parkingCar);
         App.getInstance().setmAccelBeaconMap(new HashMap<String, AccelBeacon>());
         App.getInstance().resetDelayList();
+        // 수동 시작 시 자동 주차 상태 초기화 (자동 재개 시 처음부터 시작하도록)
+        App.getInstance().setParkingStartFlag(false);
         TimerSingleton.getInstance().resetTimer();
     }
 
@@ -323,6 +345,8 @@ public class AndroidModule extends ReactContextBaseJavaModule {
     public void passiveParkingEnd(Promise promise) {
         try {
             App.getInstance().setPassiveCheck(false);
+            // 수동 주차 종료 시각 기록 → 이후 10분간 자동 주차 대기
+            App.getInstance().setPassiveParkingEndTime(System.currentTimeMillis());
 
             Context ctx = getReactApplicationContext();
             AccelBeacon beacon = PassiveParkingService.getInstance(ctx).parkingEnd();
@@ -370,29 +394,49 @@ public class AndroidModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void PermissionCheck(final Promise promise) {
         final ReactApplicationContext ctx = getReactApplicationContext();
+        final Activity a = getCurrentActivity();
 
-        // 이미 모두 허용됨
-        if (PermissionManager.hasAllPermissions(ctx)) {
-            promise.resolve(true);
+        if (a == null) {
+            promise.reject("ERROR", "Activity is null");
             return;
         }
 
-        final Activity a = getCurrentActivity();
+        // 1. 런타임 권한(위치, 블루투스 스캔 등) 체크
+        if (!PermissionManager.hasAllPermissions(ctx)) {
+            final String[] perms = PermissionManager.getRuntimePermissions();
+            PermissionAwareActivity paa = (PermissionAwareActivity) a;
 
+            paa.requestPermissions(perms, PermissionManager.REQUEST_CODE_ALL, new PermissionListener() {
+                @Override
+                public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+                    boolean allGranted = PermissionManager.hasAllPermissions(ctx);
 
-        final String[] perms = PermissionManager.getRuntimePermissions();
-        PermissionAwareActivity paa = (PermissionAwareActivity) a;
+                    // 권한이 허용되었다면 다음 단계(배터리/블루투스)로 진행하기 위해 false 반환 후 재시도 유도
+                    // 또는 여기서 직접 배터리 체크 로직을 한 번 더 실행할 수 있습니다.
+                    promise.resolve(allGranted);
+                    return true;
+                }
+            });
+            return;
+        }
 
-        paa.requestPermissions(perms, PermissionManager.REQUEST_CODE_ALL, new PermissionListener() {
-            @Override
-            public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-                // 콜백 반환 후 더 이상 RN가 기본 처리하지 않아도 됨을 표시하기 위해 true 리턴
-                boolean allGranted = PermissionManager.hasAllPermissions(ctx);
-                Log.d("AndroidModule", "Permission check result: " + allGranted);
-                promise.resolve(allGranted);
-                return true;
-            }
-        });
+        // 2. ✅ 배터리 최적화 제외 체크 (추가된 부분)
+        // 런타임 권한은 다 있는데, 배터리 최적화가 켜져 있다면 설정 화면으로 보냅니다.
+        if (!PermissionManager.isIgnoringBatteryOptimizations(ctx)) {
+            Log.d("AndroidModule", "배터리 최적화 제외 설정이 필요합니다.");
+            PermissionManager.requestIgnoreBatteryOptimizations(ctx);
+            promise.resolve(false);
+            return;
+        }
+
+        // 3. 블루투스 하드웨어 활성화 체크
+        if (!PermissionManager.isBluetoothEnabled(ctx)) {
+            Log.d("AndroidModule", "블루투스 활성화가 필요합니다.");
+            PermissionManager.requestBluetoothEnable(a);
+            promise.resolve(false);
+        } else {
+            // 모든 관문 통과 (런타임 권한 OK, 배터리 최적화 제외 OK, 블루투스 ON)
+            promise.resolve(true);
+        }
     }
-
 }

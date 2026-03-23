@@ -53,6 +53,12 @@ public class RestController {
         call.enqueue(callback);
     }
 
+    public void errorMessage(String userId, String errorMessage,  Callback<Void> callback) {
+        Log.d("RestController", "getUserId called with user_id: " + userId);
+        Call<Void> call = retrofitAPI.errorMessage(userId, errorMessage);
+        call.enqueue(callback);
+    }
+
     public void parking(String userId, String dong, String ho, Total total, Callback<Void> callback) {
         Log.d("RestController", "parking : " + userId);
         Call<Void> call = retrofitAPI.parking(userId,dong,ho, total);

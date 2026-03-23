@@ -3,6 +3,8 @@ package com.pms_parkin_mobile.util;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -10,6 +12,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
@@ -52,12 +55,73 @@ public final class PermissionManager {
                 Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED;
     }
 
+    public static void requestIgnoreBatteryOptimizations(@NonNull Context ctx) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+
+        if (isIgnoringBatteryOptimizations(ctx)) return;
+
+        try {
+            // 상세 설정 화면으로 이동 (패키지명을 들고 가서 찾기 쉽게 함)
+            Intent intent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(intent);
+
+            Toast.makeText(ctx, "리스트에서 앱을 찾아 '최적화 안 함'으로 설정해주세요.", Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            // 일부 기기에서 위 인텐트가 작동하지 않을 경우 전체 설정 화면으로 이동
+            Intent intent = new Intent(Settings.ACTION_SETTINGS);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(intent);
+        }
+    }
+
+
+
+    public static boolean isIgnoringBatteryOptimizations(@NonNull Context ctx) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true;
+
+        PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+        if (pm == null) return false;
+
+        return pm.isIgnoringBatteryOptimizations(ctx.getPackageName());
+    }
+
+
     /** (선택) Android 12+ 블루투스 연결 권한 */
     public static boolean hasNearbyConnect(@NonNull Context ctx) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true;
         return ContextCompat.checkSelfPermission(ctx,
                 Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
     }
+
+    public static boolean isBluetoothEnabled(@NonNull Context ctx) {
+        BluetoothManager bm = (BluetoothManager) ctx.getSystemService(Context.BLUETOOTH_SERVICE);
+        if (bm == null) return false;
+
+        BluetoothAdapter adapter = bm.getAdapter();
+        return adapter != null && adapter.isEnabled();
+    }
+
+    @SuppressLint("MissingPermission") // 권한 체크 후 호출할 것이므로 억제
+    public static void requestBluetoothEnable(@NonNull Activity activity) {
+        // 이미 켜져 있다면 중단
+        if (isBluetoothEnabled(activity)) return;
+
+        // Android 12 이상에서 CONNECT 권한이 없는 경우
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasNearbyConnect(activity)) {
+            Toast.makeText(activity, "블루투스 연결 권한이 필요합니다.", Toast.LENGTH_SHORT).show();
+            requestRuntimePermissions(activity);
+            return;
+        }
+
+        // 블루투스 켜기 요청 인텐트 실행
+        Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+        // activity.startActivityForResult를 써야 하지만,
+        // 간단히 팝업만 띄우려면 아래와 같이 사용합니다.
+        activity.startActivity(enableBtIntent);
+    }
+
+
 
     /** 필요한 것만 OS 버전에 맞게 한 번에 요청(단, BG 위치는 제외) */
     public static void requestRuntimePermissions(@NonNull Activity activity) {

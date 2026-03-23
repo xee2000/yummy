@@ -48,5 +48,8 @@ public interface RetrofitAPI {
 
     @POST("app/openLobby/rssi/check")
     Call<Void> openLobbyRssiFail(@Query("id") String id);
+
+    @POST("app/error/message")
+    Call<Void> errorMessage(@Query("id")String id, @Query("message")String errorMessage);
 }
 
