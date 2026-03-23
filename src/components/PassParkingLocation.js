@@ -8,176 +8,127 @@ import React, {
 import { View, Image, StyleSheet, InteractionManager } from 'react-native';
 import ImageZoom from 'react-native-image-pan-zoom';
 
-const MARKER_SIZE = 28;
+// ----------------------------------------------------------------
+// [설정값] Parking.js와 동일한 상수 세팅
+// ----------------------------------------------------------------
+const MARKER_SIZE = 30;
+const X_SCALE = 4.9125;
+const Y_SCALE = 4.775;
+const ORIGIN_W = 1572;
+const ORIGIN_H = 1146;
 
-const ZOOM_OUT_SCALE = 0.9; // ✅ 처음엔 살짝 줌아웃
-const ZOOM_IN_SCALE = 1.5; // ✅ 50% 줌인
-const ZOOM_IN_DURATION = 280; // ✅ 줌인 애니메이션 시간(ms)
-
-const FLOOR_CALIB = {
-  P1: {
-    minX: 1480,
-    minY: 1420,
-    maxX: 6000,
-    maxY: 4000,
-    invertY: true,
-  },
+const MAP_IMAGES = {
+  P1: require('../assets/P1.png'),
+  P2_E: require('../assets/P2.png'),
+  P2_W: require('../assets/P5.png'),
+  P3_G: require('../assets/P3.png'),
+  P3_B: require('../assets/P4.png'),
+  default: require('../assets/P1.png'),
 };
 
-const CAR_CONFIG = {
-  test1234: { image: require('../assets/P1.png') },
-  test5678: { image: require('../assets/P1.png') },
-  test9012: { image: require('../assets/P1.png') },
-};
-
-function getFloorKey(floor) {
-  return (
-    floor?.code ||
-    floor?.name ||
-    floor?.floorName ||
-    floor?.id ||
-    floor?.floor_id ||
-    'P1'
-  );
-}
-
-function clamp01(v) {
-  return Math.max(0, Math.min(1, v));
-}
-
-function mapServerTo01({ x, y, floor }) {
-  const key = getFloorKey(floor);
-  const cal = FLOOR_CALIB[key];
-
-  if (!cal || !Number.isFinite(x) || !Number.isFinite(y)) {
-    return { nx: 0.5, ny: 0.5 };
-  }
-
-  const nx = (x - cal.minX) / (cal.maxX - cal.minX);
-  let ny = (y - cal.minY) / (cal.maxY - cal.minY);
-
-  if (cal.invertY) ny = 1 - ny;
-
-  return { nx: clamp01(nx), ny: clamp01(ny) };
-}
-
-const PassParkingLocation = ({ selectedCar, deviceLoc, visible, focusKey }) => {
+const PassParkingLocation = ({ deviceLoc, visible, focusKey }) => {
   const zoomRef = useRef(null);
-
-  const cfg = useMemo(() => {
-    if (selectedCar && CAR_CONFIG[selectedCar]) return CAR_CONFIG[selectedCar];
-    return { image: require('../assets/P1.png') };
-  }, [selectedCar]);
-
   const [layoutSize, setLayoutSize] = useState({ width: 0, height: 0 });
+
+  // 1. 서버 mapId에 따른 배경 이미지 선택
+  const floorImage = useMemo(() => {
+    const mapId = deviceLoc?.floor;
+    if (mapId && MAP_IMAGES[mapId]) {
+      return MAP_IMAGES[mapId];
+    }
+    return MAP_IMAGES.default;
+  }, [deviceLoc?.floor]);
+
   const onLayout = useCallback(e => {
     const { width, height } = e.nativeEvent.layout;
     setLayoutSize({ width, height });
   }, []);
 
-  // ✅ 마커 중심점(cx, cy) 계산 + 마커 스타일
+  // 2. [중요] Parking.js와 동일한 좌표 계산 수식 적용
   const markerCalc = useMemo(() => {
     const { width, height } = layoutSize;
-    if (width <= 0 || height <= 0) return null;
+    if (width <= 0 || height <= 0 || !deviceLoc) return null;
 
-    const { nx, ny } = mapServerTo01({
-      x: deviceLoc?.x,
-      y: deviceLoc?.y,
-      floor: deviceLoc?.floor,
-    });
+    // (1) 서버 원본 좌표 로드
+    const rawX = deviceLoc.x != null ? Number(deviceLoc.x) : 0;
+    const rawY = deviceLoc.y != null ? Number(deviceLoc.y) : 0;
 
-    const src = Image.resolveAssetSource(cfg.image);
-    const imgW = src?.width || 1;
-    const imgH = src?.height || 1;
+    // (2) 고정 스케일 적용 (Parking.js 방식)
+    const scaledX = rawX * X_SCALE;
+    const scaledY = rawY * Y_SCALE;
 
-    const scale = Math.min(width / imgW, height / imgH);
-    const renderW = imgW * scale;
-    const renderH = imgH * scale;
-    const offsetX = (width - renderW) / 2;
-    const offsetY = (height - renderH) / 2;
+    // (3) 현재 레이아웃 해상도 대비 비율 계산
+    const percentWidth = width / ORIGIN_W;
+    const percentHeight = height / ORIGIN_H;
 
-    const cx = offsetX + nx * imgW * scale; // ✅ crop 영역 기준 마커 중심 X
-    const cy = offsetY + ny * imgH * scale; // ✅ crop 영역 기준 마커 중심 Y
+    // (4) 최종 마커 중심점 좌표
+    const cx = scaledX * percentWidth;
+    const cy = scaledY * percentHeight;
 
-    const left = cx - MARKER_SIZE / 2;
-    const top = cy - MARKER_SIZE / 2;
-
+    // (5) 스타일 반환 (마커의 중앙/하단 보정)
     return {
       cx,
       cy,
       markerStyle: [
         styles.markerImg,
-        { left, top, width: MARKER_SIZE, height: MARKER_SIZE },
+        { 
+          left: cx - MARKER_SIZE / 2, 
+          top: cy - MARKER_SIZE, // 핀 끝이 좌표에 오도록 설정
+          width: MARKER_SIZE, 
+          height: MARKER_SIZE 
+        },
       ],
     };
-  }, [cfg.image, layoutSize, deviceLoc]);
+  }, [layoutSize, deviceLoc]);
 
-  // ✅ 팝업 열릴 때(visible=true) “줌아웃 → 마커기준 줌인” 강제 실행
+  // 3. 모달 오픈 시 자동 줌인 애니메이션
   useEffect(() => {
-    if (!visible) return;
-    if (!zoomRef.current) return;
-    if (!markerCalc) return;
+    if (!visible || !zoomRef.current || !markerCalc) return;
 
     const { width, height } = layoutSize;
     if (width <= 0 || height <= 0) return;
 
     let cancelled = false;
-    let t1, t2;
+    let t1;
 
     const run = async () => {
-      // ✅ 모달 애니메이션/레이아웃 끝난 뒤 실행 (씹힘 방지)
-      await new Promise(resolve =>
-        InteractionManager.runAfterInteractions(resolve),
-      );
+      await new Promise(resolve => InteractionManager.runAfterInteractions(resolve));
       if (cancelled) return;
 
-      // requestAnimationFrame 2번 정도 기다리면 안정적
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           if (cancelled) return;
 
-          const cx = markerCalc.cx;
-          const cy = markerCalc.cy;
+          const { cx, cy } = markerCalc;
 
-          // (w/2,h/2)에 (cx,cy)가 오도록 translate 계산
-          const dxOut = (width / 2 - cx) * ZOOM_OUT_SCALE;
-          const dyOut = (height / 2 - cy) * ZOOM_OUT_SCALE;
-
-          const dxIn = (width / 2 - cx) * ZOOM_IN_SCALE;
-          const dyIn = (height / 2 - cy) * ZOOM_IN_SCALE;
-
-          // 1) 먼저 줌아웃 상태로 "마커 중심" 맞춰놓기 (즉시)
+          // 줌아웃 상태에서 마커 위치 잡기
           zoomRef.current?.centerOn?.({
-            x: dxOut,
-            y: dyOut,
-            scale: ZOOM_OUT_SCALE,
+            x: (width / 2 - cx) * 0.9,
+            y: (height / 2 - cy) * 0.9,
+            scale: 0.9,
             duration: 0,
           });
 
-          // 2) 살짝 뒤에 줌인 애니메이션
+          // 1.8배 정도로 마커 중심 줌인
           t1 = setTimeout(() => {
             if (cancelled) return;
             zoomRef.current?.centerOn?.({
-              x: dxIn,
-              y: dyIn,
-              scale: ZOOM_IN_SCALE,
-              duration: ZOOM_IN_DURATION,
+              x: width / 2 - cx,
+              y: height / 2 - cy,
+              scale: 1.8,
+              duration: 300,
             });
-          }, 80);
+          }, 100);
         });
       });
     };
 
     run();
-
     return () => {
       cancelled = true;
       if (t1) clearTimeout(t1);
-      if (t2) clearTimeout(t2);
     };
   }, [visible, focusKey, markerCalc, layoutSize]);
-
-  const { width, height } = layoutSize;
 
   return (
     <View style={styles.container}>
@@ -185,36 +136,26 @@ const PassParkingLocation = ({ selectedCar, deviceLoc, visible, focusKey }) => {
         <View style={styles.borderWrapper}>
           <ImageZoom
             ref={zoomRef}
-            cropWidth={width || 1}
-            cropHeight={height || 1}
-            imageWidth={width || 1}
-            imageHeight={height || 1}
-            minScale={0.6}
+            cropWidth={layoutSize.width || 1}
+            cropHeight={layoutSize.height || 1}
+            imageWidth={layoutSize.width || 1}
+            imageHeight={layoutSize.height || 1}
+            minScale={0.5}
             maxScale={5}
-            enableCenterFocus
-            pinchToZoom
-            enableDoubleClickZoom
+            enableCenterFocus={false}
           >
-            {width > 0 && height > 0 ? (
-              <View>
+            {layoutSize.width > 0 && (
+              <View style={{ width: layoutSize.width, height: layoutSize.height }}>
                 <Image
-                  source={cfg.image}
-                  style={{ width, height }}
-                  resizeMode="contain"
+                  source={floorImage}
+                  style={styles.mapImage}
+                  resizeMode="stretch" // Parking.js와 동일하게 stretch 권장
                 />
                 <Image
                   source={require('../assets/parking.png')}
                   style={markerCalc?.markerStyle}
                 />
               </View>
-            ) : (
-              <View
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  backgroundColor: '#fff',
-                }}
-              />
             )}
           </ImageZoom>
         </View>
@@ -224,17 +165,18 @@ const PassParkingLocation = ({ selectedCar, deviceLoc, visible, focusKey }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { alignItems: 'center', backgroundColor: '#FFFFFF' },
-  viewport: { width: '92%', aspectRatio: 3 / 2, alignSelf: 'center' },
+  container: { width: '100%', height: '100%', backgroundColor: '#FFFFFF' },
+  viewport: { flex: 1, alignSelf: 'center', width: '100%' },
   borderWrapper: {
     flex: 1,
-    borderWidth: 2,
-    borderColor: '#000',
-    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#fff',
+    backgroundColor: '#F8FAFC',
   },
-  markerImg: { position: 'absolute' },
+  mapImage: { width: '100%', height: '100%', position: 'absolute' },
+  markerImg: { position: 'absolute', zIndex: 999 },
 });
 
 export default PassParkingLocation;

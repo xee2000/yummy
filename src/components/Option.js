@@ -29,12 +29,11 @@ const Option = ({ navigation }) => {
   const { AndroidModule } = NativeModules;
 
   // -----------------------------
-  // ✅ 서비스 상태 체크 함수
+  // ✅ 서비스 상태 체크 함수 (네이티브 현황 동기화)
   // -----------------------------
   const checkServiceStatus = useCallback(async () => {
     try {
       if (Platform.OS === 'android' && AndroidModule?.ServiceCheck) {
-        // 네이티브에서 WritableMap { Ble: boolean, Lobby: boolean } 반환
         const res = await AndroidModule.ServiceCheck();
         console.log('[Option] ServiceCheck Result:', res);
 
@@ -79,24 +78,39 @@ const Option = ({ navigation }) => {
   };
 
   // -----------------------------
-  // ✅ 자동 문열림 서비스 토글 핸들러
+  // ✅ 1. 주차위치 서비스 토글 (Ble 플래그)
+  // -----------------------------
+  const onToggleBleService = useCallback(async () => {
+    try {
+      const nextStatus = !sensorOk;
+      if (Platform.OS === 'android' && AndroidModule?.ServiceFlag) {
+        // 네이티브 메서드 ServiceFlag 호출 (true/false)
+        await AndroidModule.ServiceFlag(nextStatus);
+        
+        // 변경 후 상태 재확인
+        await checkServiceStatus();
+      }
+    } catch (err) {
+      console.error('ServiceFlag failed:', err);
+      Alert.alert('오류', '주차 서비스 상태 변경에 실패했습니다.');
+    }
+  }, [sensorOk, AndroidModule, checkServiceStatus]);
+
+  // -----------------------------
+  // ✅ 2. 자동 문열림 서비스 토글 (Lobby 플래그)
   // -----------------------------
   const onToggleService = useCallback(async () => {
     try {
       const nextStatus = !serviceEnabled;
-
-      // ✅ 수정된 부분: AndroidModule.passOpenLobbyFlag 호출
       if (Platform.OS === 'android' && AndroidModule?.passOpenLobbyFlag) {
         await AndroidModule.passOpenLobbyFlag(nextStatus);
-
-        // 네이티브 플래그 변경 후 UI 업데이트를 위해 상태 재확인
         await checkServiceStatus();
       } else {
         setServiceEnabled(nextStatus);
       }
     } catch (err) {
       console.error('passOpenLobbyFlag failed:', err);
-      Alert.alert('오류', '서비스 상태 변경에 실패했습니다.');
+      Alert.alert('오류', '자동 문열림 상태 변경에 실패했습니다.');
     }
   }, [serviceEnabled, AndroidModule, checkServiceStatus]);
 
@@ -112,7 +126,7 @@ const Option = ({ navigation }) => {
         <Text style={styles.menuText}>앱 설정으로 이동</Text>
       </TouchableOpacity>
 
-      {/* ✅ 주차위치 서비스 가동 상태 (Ble 플래그) */}
+      {/* ✅ 주차위치 서비스 영역 (Switch 추가) */}
       <View style={styles.itemRow}>
         <View>
           <Text style={styles.itemLabel}>주차위치 서비스 상태</Text>
@@ -121,16 +135,18 @@ const Option = ({ navigation }) => {
           <Text style={[styles.stateText, sensorOk ? styles.on : styles.off]}>
             {sensorOk ? '작동중' : '중지됨'}
           </Text>
-          <Icon
-            name={sensorOk ? 'checkmark-circle' : 'alert-circle'}
-            size={22}
-            color={sensorOk ? '#16A34A' : '#EF4444'}
+          <Switch
+            value={sensorOk}
+            onValueChange={onToggleBleService}
+            trackColor={{ false: '#d1d5db', true: '#3b82f6' }} // 주차 서비스는 파란색 계열
+            thumbColor={'#ffffff'}
+            ios_backgroundColor="#d1d5db"
             style={{ marginLeft: 8 }}
           />
         </View>
       </View>
 
-      {/* ✅ 자동 문열림 서비스 사용여부 (Lobby 플래그) */}
+      {/* ✅ 자동 문열림 서비스 영역 */}
       <View style={styles.itemRow}>
         <View>
           <Text style={styles.itemLabel}>자동 문열림 서비스</Text>
@@ -144,8 +160,8 @@ const Option = ({ navigation }) => {
           <Switch
             value={serviceEnabled}
             onValueChange={onToggleService}
-            trackColor={{ false: '#d1d5db', true: '#10b981' }}
-            thumbColor={Platform.OS === 'android' ? '#ffffff' : undefined}
+            trackColor={{ false: '#d1d5db', true: '#10b981' }} // 문열림은 초록색 계열
+            thumbColor={'#ffffff'}
             ios_backgroundColor="#d1d5db"
             style={{ marginLeft: 8 }}
           />
@@ -167,7 +183,6 @@ const Option = ({ navigation }) => {
   );
 };
 
-// ... 스타일 정의는 동일
 const styles = StyleSheet.create({
   container: {
     padding: 24,
