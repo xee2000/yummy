@@ -4,13 +4,18 @@ import android.util.Log;
 
 import com.pms_parkin_mobile.dto.AccelBeacon;
 import com.pms_parkin_mobile.dto.GyroSensor;
+import com.pms_parkin_mobile.dto.GyroSensor2;
 import com.pms_parkin_mobile.service.App;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Map;
+
+import timber.log.Timber;
 
 public class SaveArrayListValue {
 
@@ -103,6 +108,19 @@ public class SaveArrayListValue {
 
         App.getInstance().getmGyroSensorArrayList().add(gyroSensor);
     }
+    public void SaveGyro2() {
+        DataManagerSingleton dataManagerSingleton = DataManagerSingleton.getInstance();
+
+        GyroSensor2 gyroSensor = new GyroSensor2();
+        gyroSensor.setDelay(String.valueOf(dataManagerSingleton.getWholeTimerDelay()));
+        gyroSensor.setX(String.valueOf(dataManagerSingleton.getSaveCountRoll()));
+        gyroSensor.setY(String.valueOf(dataManagerSingleton.getSaveCountPitch()));
+        gyroSensor.setZ(String.valueOf(dataManagerSingleton.getSaveCountYaw()));
+        dataManagerSingleton.getGyroSensorArrayList2().add(gyroSensor);
+        SimpleDateFormat full_sdf = new SimpleDateFormat("yyyy-MM-dd, hh:mm:ss : SSS", Locale.getDefault());
+        Timber.d("TAG_BYTE_CALC_GYRO - GYRO BYTE 0 : " + dataManagerSingleton.getGyroSensorArrayList().toString().length() + " , TIME : " + full_sdf.format(System.currentTimeMillis()));
+    }
+
 
     public void SaveAccelBeacon(String id, String rssi, String delay) {
         AccelBeacon accelBeacon = App.getInstance().getmAccelBeaconMap().get(id);

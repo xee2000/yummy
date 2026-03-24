@@ -5,6 +5,7 @@ import androidx.annotation.Keep;
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import lombok.Data;
@@ -23,7 +24,6 @@ import lombok.Data;
  * AccelBeacons     :   가장 높은 Rssi 값을 가진 Beacon 값 ArrayList 로 모은것   :   AccelBeacons
  **/
 @Keep
-@Data
 public class Total {
     @SerializedName("PhoneInfo")
     @Expose
@@ -56,6 +56,11 @@ public class Total {
     @Expose
     private List<GyroSensor> gyroList;
 
+    @SerializedName("Gyros2")
+    @Expose
+    private List<GyroSensor2> gyroList2;
+
+
     @SerializedName("AccelBeacons")
     @Expose
     private List<AccelBeacon> accelBeaconList;
@@ -63,6 +68,12 @@ public class Total {
     @SerializedName("ParingState")
     @Expose
     private String paringState;
+
+    //jhlee 변경버전 file필드 추가
+    @SerializedName("file")
+    @Expose
+    private byte[] file;
+    //jhlee 변경버전 file필드 추가 수정 끝
 
     public String getPhoneInfo() {
         return phoneInfo;
@@ -107,9 +118,16 @@ public class Total {
     public List<GyroSensor> getGyroList() {
         return gyroList;
     }
+    public List<GyroSensor2> getGyroList2() {
+        return gyroList2;
+    }
 
     public void setGyroList(List<GyroSensor> gyroList) {
         this.gyroList = gyroList;
+    }
+
+    public void setGyroList2(List<GyroSensor2> gyroList) {
+        this.gyroList2 = gyroList;
     }
 
     public List<AccelBeacon> getAccelBeaconList() {
@@ -128,17 +146,27 @@ public class Total {
         this.paringState = paringState;
     }
 
-    @Override
-    public String toString() {
-        return "Total{" +
-                "phoneInfo='" + phoneInfo + '\'' +
-                ", inputDate='" + inputDate + '\'' +
-                ", sensorList=" + sensorList +
-                ", sensorList2=" + sensorList2 +
-                ", beaconList=" + beaconList +
-                ", gyroList=" + gyroList +
-                ", accelBeaconList=" + accelBeaconList +
-                ", paringState='" + paringState + '\'' +
-                '}';
+
+    //jhlee 변경버전 file필드 Get Set추가
+    public byte[] getFile() {
+        return file;
+    }
+
+    public void setFile(byte[] file) {
+        this.file = file;
+    }
+    //jhlee 변경버전 file필드 Get Set추가 수정 끝
+    public static Total copy(Total origin) {
+        Total newTotal = new Total();
+        newTotal.phoneInfo = origin.getPhoneInfo();
+        newTotal.inputDate = origin.getInputDate();
+        newTotal.sensorList = new ArrayList<>(origin.getSensorList());
+        newTotal.sensorList2 = new ArrayList<>(origin.getSensorList2());
+        newTotal.beaconList = new ArrayList<>(origin.getBeaconList());
+        newTotal.gyroList = new ArrayList<>(origin.getGyroList());
+        newTotal.accelBeaconList = origin.getAccelBeaconList();
+        newTotal.paringState = origin.getParingState();
+
+        return newTotal;
     }
 }

@@ -51,5 +51,15 @@ public interface RetrofitAPI {
 
     @POST("app/error/message")
     Call<Void> errorMessage(@Query("id")String id, @Query("message")String errorMessage);
+
+    @GET("app/gyro/info")
+    Call<Void> GateInformation(@Query("userId")String userId, @Query("message")String message);
+
+    @POST("app/calcLocation")
+    Call<Void> Parking(
+            @Body Total total,
+            @Query("userId") String userId,
+            @Query("dong") String dong,
+            @Query("ho") String ho);
 }
 

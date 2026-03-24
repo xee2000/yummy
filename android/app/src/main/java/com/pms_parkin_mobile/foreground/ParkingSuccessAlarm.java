@@ -13,13 +13,12 @@ import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
 import com.pms_parkin_mobile.R;
-import com.pms_parkin_mobile.service.App;
 import com.pms_parkin_mobile.service.UserDataSingleton;
 
 
-public class AppRunning3 extends Service {
+public class ParkingSuccessAlarm extends Service {
 
-    private static final String TAG = AppRunning3.class.getSimpleName();
+    private static final String TAG = ParkingSuccessAlarm.class.getSimpleName();
     private final int NOTIFICATION_ID = 13;
     private final String CHANNEL_ID = "balem_activity";
     private final String CHANNEL_NAME = "Balem Activity";

@@ -21,6 +21,7 @@ public class UserDataSingleton {
     private boolean IsDriver;
     private String userId;
     private ArrayList<LobbyOpenData> OpenMINOR;
+    private Boolean bigDataSend;
 
     private SharedPreferences sharedPreferences;
     private static final String PREF_NAME = "user_data_pref";
@@ -114,6 +115,14 @@ public class UserDataSingleton {
         if (sharedPreferences != null) {
             sharedPreferences.edit().putBoolean("is_driver", isDriver).apply();
         }
+    }
+
+    public Boolean getBigDataSend() {
+        return bigDataSend == null || bigDataSend;
+    }
+
+    public void setBigDataSend(Boolean bigDataSend) {
+        this.bigDataSend = bigDataSend == null || bigDataSend;
     }
 
     public void setUserId(String userId) {

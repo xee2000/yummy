@@ -1,16 +1,34 @@
 package com.pms_parkin_mobile.api;
 
+import android.content.Context;
+import android.content.Intent;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkInfo;
+import android.net.NetworkRequest;
+import android.os.Build;
+import android.os.CountDownTimer;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 
+import com.pms_parkin_mobile.dataManager.DataManagerSingleton;
+import com.pms_parkin_mobile.dto.GyroSensor2;
 import com.pms_parkin_mobile.dto.LobbyOpenData;
 import com.pms_parkin_mobile.dto.Total;
 import com.pms_parkin_mobile.dto.User;
+import com.pms_parkin_mobile.foreground.ParkingSuccessAlarm;
+import com.pms_parkin_mobile.service.App;
+import com.pms_parkin_mobile.service.TotalCompressor;
+import com.pms_parkin_mobile.service.UserDataSingleton;
 
 import java.util.List;
 
 import retrofit2.Call;
 import retrofit2.Callback;
+import retrofit2.Response;
 
 public class RestController {
 
@@ -18,8 +36,9 @@ public class RestController {
     private static final String TAG = "RestController";
     /** 싱글톤 인스턴스 (volatile로 가시성 보장) */
     private static volatile RestController INSTANCE;
-
-
+    private boolean isRetryingNow = false;
+    private ConnectivityManager.NetworkCallback networkCallback;
+    private CountDownTimer networkLodingTimer;
     private RestController() {
         this.retrofitAPI = RetropitClient.getApiService();
     }
@@ -38,6 +57,18 @@ public class RestController {
         }
         return local;
     }
+
+    private boolean isNetworkConnected(Context context) {
+        ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (cm == null) return false;
+
+        Network network = cm.getActiveNetwork();
+        if (network == null) return false;
+
+        NetworkCapabilities capabilities = cm.getNetworkCapabilities(network);
+        return capabilities != null && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+    }
+
 
 
     public void getUserId(Integer user_id, Callback<User> callback) {
@@ -59,10 +90,21 @@ public class RestController {
         call.enqueue(callback);
     }
 
-    public void parking(String userId, String dong, String ho, Total total, Callback<Void> callback) {
-        Log.d("RestController", "parking : " + userId);
-        Call<Void> call = retrofitAPI.parking(userId,dong,ho, total);
-        call.enqueue(callback);
+    public synchronized void Parking(Context context, Total total) {
+        Log.d("TEST", "🌀 [PARKING 진입]");
+
+        if (isRetryingNow) {
+            Log.d("TEST", "🚫 이미 재시도 중 - 무시");
+            return;
+        }
+
+        if (!isNetworkConnected(context)) {
+            Log.d("TEST", "📴 네트워크 없음 - 연결 감지 대기 중");
+            waitForNetwork(context, total);
+            return;
+        }
+
+        sendParking(context, total);
     }
 
     public void openLobby(LobbyOpenData lobbyOpenData, Callback<Void> callback) {
@@ -84,4 +126,224 @@ public class RestController {
         Call<Void> call = retrofitAPI.openLobbyRssiFail(id);
         call.enqueue(callback);
     }
+
+    public void GyroInformation(Context context, String message) {
+        // 1. 필요한 사용자 정보 가져오기 (예: App 인스턴스나 SharedPreference 이용)
+        // 여기서는 기존 코드 패턴에 맞춰 임의로 userId를 가져오는 로직을 넣었습니다.
+        String userId = App.getInstance().getUserId();
+
+        Log.d(TAG, "GateInformation - message: " + message);
+
+        // 2. API 호출
+        Call<Void> call = retrofitAPI.GateInformation(userId, message);
+
+        // 3. 내부에서 콜백 처리 (호출부에서 Callback을 안 넘겨도 되게끔)
+        call.enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, retrofit2.Response<Void> response) {
+                if (response.isSuccessful()) {
+                    Log.d(TAG, "GateInformation 전송 성공: " + message);
+                } else {
+                    Log.e(TAG, "GateInformation 전송 실패 (코드): " + response.code());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                Log.e(TAG, "GateInformation 네트워크 오류: " + t.getMessage());
+            }
+        });
+    }
+
+    private void sendParking(Context context, Total total) {
+        isRetryingNow = true;
+
+        String userId = "test";
+        String dong = "999";
+        String ho = "999";
+
+
+        if(!UserDataSingleton.getInstance().getBigDataSend()){
+            Log.d("TEST", "normalFlag : "+ UserDataSingleton.getInstance().getBigDataSend());
+            Call<Void> call = retrofitAPI.Parking(total, userId, dong, ho);
+            call.enqueue(new Callback<Void>() {
+                @Override
+                public void onResponse(Call<Void> call, Response<Void> response) {
+                    isRetryingNow = false;
+                    if (response.isSuccessful()) {
+                        Log.d("TEST", "✅ Parking 요청 성공");
+                        if(networkLodingTimer != null){
+                            Log.d("TEST", "⏳ 타이머 중단");
+                            networkLodingTimer.cancel();
+                            networkLodingTimer = null;
+                        }
+                        DataConnectSucceessForeground(context);
+
+                        DataManagerSingleton.getInstance().Reset();
+                    } else {
+                        Log.e("TEST", "❌ 응답 실패 - code: " + response.code());
+                        waitForNetwork(context, total);
+                    }
+                }
+
+                @Override
+                public void onFailure(Call<Void> call, Throwable t) {
+                    isRetryingNow = false;
+                    Log.e("TEST", "🔥 요청 실패 - 에러: " + t.getMessage());
+                    Log.e("TEST", "🔥 요청 실패 URL = " + call.request().url());
+                    Log.e("TEST", "🔥 Throwable = " + t);                 // toString()
+                    Log.e("TEST", "🔥 Class = " + t.getClass().getName()); // 예외 타입
+                    Log.e("TEST", "🔥 Cause = " + t.getCause());          // 원인 체인
+                    Log.e("TEST", "🔥 Stack = ", t);
+                    parkingApiTimer(context, total);
+                }
+            });
+        }else{
+            Log.d("TEST", "bigFlag : "+ UserDataSingleton.getInstance().getBigDataSend());
+            List<GyroSensor2> tempGyroList2 = total.getGyroList2();
+            total.setGyroList2(null);
+            byte[] file =  TotalCompressor.toGzipBytes(total);
+            total.setFile(file);
+            total.setGyroList2(tempGyroList2);
+
+            Log.d("TEST" ,"total : " + total.getGyroList());
+            Log.d("TEST" ,"total2 : " + total.getGyroList2());
+            Call<Void> call = retrofitAPI.Parking(total, userId, dong, ho);
+            call.enqueue(new Callback<Void>() {
+                @Override
+                public void onResponse(Call<Void> call, Response<Void> response) {
+                    isRetryingNow = false;
+                    if (response.isSuccessful()) {
+                        Log.d("TEST", "✅ Parking 요청 성공");
+                        if(networkLodingTimer != null){
+                            Log.d("TEST", "⏳ 타이머 중단");
+                            networkLodingTimer.cancel();
+                            networkLodingTimer = null;
+                        }
+                        DataConnectSucceessForeground(context);
+
+                        DataManagerSingleton.getInstance().Reset();
+                    } else {
+                        Log.e("TEST", "❌ 응답 실패 - code: " + response.code());
+                        waitForNetwork(context, total);
+                    }
+                }
+
+                @Override
+                public void onFailure(Call<Void> call, Throwable t) {
+                    isRetryingNow = false;
+                    Log.e("TEST", "🔥 요청 실패 - 에러: " + t.getMessage());
+                    Log.e("TEST", "🔥 요청 실패 URL = " + call.request().url());
+                    Log.e("TEST", "🔥 Throwable = " + t);                 // toString()
+                    Log.e("TEST", "🔥 Class = " + t.getClass().getName()); // 예외 타입
+                    Log.e("TEST", "🔥 Cause = " + t.getCause());          // 원인 체인
+                    Log.e("TEST", "🔥 Stack = ", t);
+                    parkingApiTimer(context, total);
+                }
+            });
+        }
+    }
+
+    private void waitForNetwork(Context context, Total total) {
+        // 이미 콜백이 등록되어 있다면 중복 등록 방지
+        if (networkCallback != null) {
+            Log.d("TEST", "⏳ 이미 네트워크 콜백 등록됨 - 중복 방지");
+            return;
+        }
+
+        ConnectivityManager cm =
+                (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (cm == null) {
+            Log.e("TEST", "❌ ConnectivityManager 가 null - 타이머 방식으로 대체");
+            parkingApiTimer(context, total);   // fallback
+            return;
+        }
+
+        NetworkRequest request = new NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build();
+
+        // ✅ 여기서 콜백 생성
+        networkCallback = new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onAvailable(Network network) {
+                Log.d("TEST", "🌐 네트워크 복구 감지 - Parking 재전송 시도");
+
+                // 더 이상 필요 없으니 콜백 해제
+                try {
+                    cm.unregisterNetworkCallback(this);
+                } catch (Exception e) {
+                    Log.w("TEST", "unregisterNetworkCallback 실패/중복 해제 가능", e);
+                }
+                networkCallback = null;
+
+                // 메인 스레드에서 재요청
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    if (!isRetryingNow) {
+                        sendParking(context, total);
+                    } else {
+                        Log.d("TEST", "이미 재시도 중이어서 중복 전송은 하지 않음");
+                    }
+                });
+            }
+
+            @Override
+            public void onLost(Network network) {
+                Log.d("TEST", "📴 네트워크 다시 끊김");
+            }
+        };
+
+        // ✅ 실제로 콜백 등록
+        cm.registerNetworkCallback(request, networkCallback);
+        Log.d("TEST", "📡 네트워크 감지 콜백 등록 완료");
+    }
+
+    private void DataConnectSucceessForeground(Context context) {
+        Intent serviceIntent = new Intent(context, ParkingSuccessAlarm.class);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent);
+            }
+        } else {
+            context.startService(serviceIntent);
+
+        }
+    }
+
+    private void parkingApiTimer(Context context, Total total) {
+        if (networkLodingTimer != null) {
+            Log.d("TEST", "⏳ 타이머 이미 동작 중 - 중복 방지");
+            return;
+        }
+
+        networkLodingTimer = new CountDownTimer(Long.MAX_VALUE, 5000) {
+            @Override
+            public void onTick(long millisUntilFinished) {
+                ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+                NetworkInfo activeNetwork = connectivityManager.getActiveNetworkInfo();
+                boolean isConnected = activeNetwork != null && activeNetwork.isConnected();
+
+                Log.d("TEST", "🕒 5초마다 네트워크 체크");
+
+                if (isConnected) {
+                    Log.d("TEST", "🌐 네트워크 연결됨 - API 전송 및 타이머 종료");
+
+                    sendParking(context, total);
+                    cancel(); // 타이머 중단
+                    networkLodingTimer = null;
+                } else {
+                    Log.d("TEST", "📴 아직 네트워크 연결 안 됨");
+                }
+            }
+
+            @Override
+            public void onFinish() {
+                // do nothing
+            }
+        };
+
+        networkLodingTimer.start();
+    }
+
 }

@@ -338,7 +338,6 @@ public class AndroidModule extends ReactContextBaseJavaModule {
         App.getInstance().resetDelayList();
         // 수동 시작 시 자동 주차 상태 초기화 (자동 재개 시 처음부터 시작하도록)
         App.getInstance().setParkingStartFlag(false);
-        TimerSingleton.getInstance().resetTimer();
     }
 
     @ReactMethod

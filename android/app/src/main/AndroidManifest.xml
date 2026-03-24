@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -56,7 +58,7 @@
             android:name="com.pms_parkin_mobile.module.UserIntent"
             android:exported="true" />
 
-            <service android:name=".foreground.AppRunning3"
+            <service android:name=".foreground.ParkingSuccessAlarm"
                 android:enabled="true"
                 android:exported="true"
                 android:foregroundServiceType="location"
