@@ -60,6 +60,7 @@ public class BeaconFunction {
 
     public void OnlyOpenLobby(int minor, int major, double rssi, Context context) {
         // 1. 데이터 리스트 가져오기
+        Log.d("TEST" ,"minor : " + minor);
         ArrayList<LobbyOpenData> lobbyOpenData = UserDataSingleton.getInstance().getOpenMINOR();
 
         Log.d("TEST", "user : " + UserDataSingleton.getInstance().getUserId() + " : " + lobbyOpenData);
@@ -67,35 +68,13 @@ public class BeaconFunction {
         if (lobbyOpenData == null) {
 
             // 2. OPEN 초기화 요청 (Callback 선언 문법 수정: new 키워드 추가)
-            RestController.getInstance().openLobbyDataNull(UserDataSingleton.getInstance().getUserId(), new Callback<Void>() {
-                @Override
-                public void onResponse(Call<Void> call, Response<Void> response) {
-                    Log.d("TEST", "openLobby data null");
-                }
-
-                @Override
-                public void onFailure(Call<Void> call, Throwable t) {
-                    Log.e("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 초기화 요청 실패 : " + t.getMessage());
-                }
-            });
-
-
+            RestController.getInstance().openLobbyDataNull(UserDataSingleton.getInstance().getUserId());
             Log.e("Ble", "LobbyOpenData list is null");
             return;
         }
 
         // openLobby 데이터 null
-        RestController.getInstance().openLobbyinit(UserDataSingleton.getInstance().getUserId(), new Callback<Void>() {
-            @Override
-            public void onResponse(Call<Void> call, Response<Void> response) {
-                Log.d("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 초기화 요청 : " + response.isSuccessful());
-            }
-
-            @Override
-            public void onFailure(Call<Void> call, Throwable t) {
-                Log.e("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 초기화 요청 실패 : " + t.getMessage());
-            }
-        });
+        RestController.getInstance().openLobbyinit(UserDataSingleton.getInstance().getUserId());
 
         // 3. 루프를 돌며 Minor 값 비교
         String minorHex = String.format("%04X", minor); // 현재 스캔된 Minor (Hex)
@@ -126,42 +105,9 @@ public class BeaconFunction {
 
                     Log.d("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 요청 시도: " + lobbyMinor);
 
-                    RestController.getInstance().openLobby(newdata, new Callback<Void>() {
-                        // OnlyOpenLobby 메서드 내부의 onResponse 콜백 부분 수정
-                        @Override
-                        public void onResponse(Call<Void> call, Response<Void> response) {
-                            Log.d("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 요청 결과: " + response.isSuccessful() + ", RSSI: " + rssi);
-
-                            if (response.isSuccessful()) {
-                                // ✅ App.getInstance()는 Application을 상속받으므로 Context로 사용 가능합니다.
-                                Intent intent = new Intent(context, OpenLobbyAlarm.class);
-
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    // 안드로이드 8.0 이상은 startForegroundService를 호출해야 함
-                                    context.startForegroundService(intent);
-                                } else {
-                                    context.startService(intent);
-                                }
-                            }
-                        }
-
-                        @Override
-                        public void onFailure(Call<Void> call, Throwable t) {
-                            Log.e("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 요청 실패 : " + t.getMessage());
-                        }
-                    });
-                }else{
-                    RestController.getInstance().openLobbyRssiFail(UserDataSingleton.getInstance().getUserId(), new Callback<Void>() {
-                        @Override
-                        public void onResponse(Call<Void> call, Response<Void> response) {
-                            Log.d("TEST", "rssi Fail api : " + response.isSuccessful());
-                        }
-
-                        @Override
-                        public void onFailure(Call<Void> call, Throwable t) {
-                            Log.e("TEST", "TAG_ONLY_LOBBY_BEACON - OPEN 초기화 요청 실패 : " + t.getMessage());
-                        }
-                    });
+                    RestController.getInstance().openLobby(newdata);
+                }else {
+                    RestController.getInstance().openLobbyRssiFail(UserDataSingleton.getInstance().getUserId());
                 }
             }
         }

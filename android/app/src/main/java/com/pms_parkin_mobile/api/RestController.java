@@ -19,6 +19,7 @@ import com.pms_parkin_mobile.dto.GyroSensor2;
 import com.pms_parkin_mobile.dto.LobbyOpenData;
 import com.pms_parkin_mobile.dto.Total;
 import com.pms_parkin_mobile.dto.User;
+import com.pms_parkin_mobile.foreground.OpenLobbyAlarm;
 import com.pms_parkin_mobile.foreground.ParkingSuccessAlarm;
 import com.pms_parkin_mobile.service.App;
 import com.pms_parkin_mobile.service.TotalCompressor;
@@ -71,24 +72,74 @@ public class RestController {
 
 
 
-    public void getUserId(Integer user_id, Callback<User> callback) {
-        Log.d("RestController", "getUserId called with user_id: " + user_id);
+    public void getUserId(Integer user_id) {
+        Log.d(TAG, "getUserId 전송 시작 - id: " + user_id);
         Call<User> call = retrofitAPI.getUserId(user_id);
-        call.enqueue(callback);
+
+        call.enqueue(new Callback<User>() {
+            @Override
+            public void onResponse(Call<User> call, Response<User> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    Log.d(TAG, "getUserId 조회 성공: " + response.body().toString());
+                    // 필요 시 여기에 DataManager 저장 로직 추가 가능
+                } else {
+                    Log.e(TAG, "getUserId 조회 실패 (코드): " + response.code());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<User> call, Throwable t) {
+                Log.e(TAG, "getUserId 네트워크 오류: " + t.getMessage());
+            }
+        });
     }
 
-
-    public void gyroinfo(String userId, int errorcode,  Callback<Void> callback) {
-        Log.d("RestController", "getUserId called with user_id: " + userId);
+    public void gyroinfo(String userId, int errorcode) {
+        Log.d(TAG, "gyroinfo 전송 시작 - User: " + userId + ", Code: " + errorcode);
         Call<Void> call = retrofitAPI.gyroinfo(userId, errorcode);
-        call.enqueue(callback);
+
+        call.enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, Response<Void> response) {
+                if (response.isSuccessful()) {
+                    Log.d(TAG, "gyroinfo 전송 성공");
+                } else {
+                    Log.e(TAG, "gyroinfo 전송 실패 (코드): " + response.code());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                Log.e(TAG, "gyroinfo 네트워크 오류: " + t.getMessage());
+            }
+        });
     }
 
-    public void errorMessage(String userId, String errorMessage,  Callback<Void> callback) {
-        Log.d("RestController", "getUserId called with user_id: " + userId);
+    public void errorMessage(String userId, String errorMessage) {
+        // 1. 호출 시점 로그 출력
+        Log.d(TAG, "errorMessage 전송 시작 - User: " + userId + ", Msg: " + errorMessage);
+
+        // 2. API 호출 (Retrofit)
         Call<Void> call = retrofitAPI.errorMessage(userId, errorMessage);
-        call.enqueue(callback);
+
+        // 3. 내부에서 콜백을 직접 구현하여 결과 로그까지 출력
+        call.enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, retrofit2.Response<Void> response) {
+                if (response.isSuccessful()) {
+                    Log.d(TAG, "서버 에러 로그 전송 성공 [User: " + userId + "]");
+                } else {
+                    Log.e(TAG, "서버 에러 로그 전송 실패 (코드: " + response.code() + ")");
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                Log.e(TAG, "서버 에러 로그 전송 중 네트워크 오류: " + t.getMessage());
+            }
+        });
     }
+
 
     public synchronized void Parking(Context context, Total total) {
         Log.d("TEST", "🌀 [PARKING 진입]");
@@ -107,24 +158,109 @@ public class RestController {
         sendParking(context, total);
     }
 
-    public void openLobby(LobbyOpenData lobbyOpenData, Callback<Void> callback) {
-        Call<Void> call = retrofitAPI.openLobby(lobbyOpenData.getId(), lobbyOpenData.getDong(), lobbyOpenData.getHo(), lobbyOpenData.getMinor(), lobbyOpenData.getRssi());
-        call.enqueue(callback);
+    public void openLobby(LobbyOpenData lobbyOpenData) {
+        Log.d(TAG, "openLobby 요청 시작 - Minor: " + lobbyOpenData.getMinor());
+        Call<Void> call = retrofitAPI.openLobby(
+                lobbyOpenData.getId(),
+                lobbyOpenData.getDong(),
+                lobbyOpenData.getHo(),
+                lobbyOpenData.getMinor(),
+                lobbyOpenData.getRssi()
+        );
+
+        call.enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, Response<Void> response) {
+                if (response.isSuccessful()) {
+                    Log.d(TAG, "openLobby 성공 [Minor: " + lobbyOpenData.getMinor() + "]");
+                    Intent intent = new Intent(App.getInstance().getContext(), OpenLobbyAlarm.class);
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        // 안드로이드 8.0 이상은 startForegroundService를 호출해야 함
+                        App.getInstance().getContext().startForegroundService(intent);
+                    } else {
+                        App.getInstance().getContext().startService(intent);
+                    }
+
+                } else {
+                    Log.e(TAG, "openLobby 실패 (코드): " + response.code());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                Log.e(TAG, "openLobby 네트워크 오류: " + t.getMessage());
+            }
+        });
     }
 
-    public void openLobbyinit(String id, Callback<Void> callback) {
+    public void openLobbyinit(String id) {
+        Log.d(TAG, "openLobbyinit 요청 시작 - ID: " + id);
         Call<Void> call = retrofitAPI.openLobbyinit(id);
-        call.enqueue(callback);
+
+        call.enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, Response<Void> response) {
+                if (response.isSuccessful()) {
+                    Log.d(TAG, "openLobbyinit 성공");
+                } else {
+                    Log.e(TAG, "openLobbyinit 실패 (코드): " + response.code());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                Log.e(TAG, "openLobbyinit 네트워크 오류: " + t.getMessage());
+            }
+        });
     }
 
-    public void openLobbyDataNull(String id, Callback<Void> callback) {
+    /**
+     * 5. 로비 데이터 없음 전송 (내부 콜백 처리)
+     */
+    public void openLobbyDataNull(String id) {
+        Log.d(TAG, "openLobbyDataNull 요청 시작 - ID: " + id);
         Call<Void> call = retrofitAPI.openLobbyDataNull(id);
-        call.enqueue(callback);
+
+        call.enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, Response<Void> response) {
+                if (response.isSuccessful()) {
+                    Log.d(TAG, "openLobbyDataNull 전송 성공");
+                } else {
+                    Log.e(TAG, "openLobbyDataNull 전송 실패: " + response.code());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                Log.e(TAG, "openLobbyDataNull 네트워크 오류: " + t.getMessage());
+            }
+        });
     }
 
-    public void openLobbyRssiFail(String id, Callback<Void> callback) {
+    /**
+     * 6. 로비 RSSI 실패 전송 (내부 콜백 처리)
+     */
+    public void openLobbyRssiFail(String id) {
+        Log.d(TAG, "openLobbyRssiFail 요청 시작 - ID: " + id);
         Call<Void> call = retrofitAPI.openLobbyRssiFail(id);
-        call.enqueue(callback);
+
+        call.enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, Response<Void> response) {
+                if (response.isSuccessful()) {
+                    Log.d(TAG, "openLobbyRssiFail 전송 성공");
+                } else {
+                    Log.e(TAG, "openLobbyRssiFail 전송 실패: " + response.code());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                Log.e(TAG, "openLobbyRssiFail 네트워크 오류: " + t.getMessage());
+            }
+        });
     }
 
     public void GyroInformation(Context context, String message) {

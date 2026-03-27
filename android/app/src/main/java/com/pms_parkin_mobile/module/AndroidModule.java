@@ -332,20 +332,18 @@ public class AndroidModule extends ReactContextBaseJavaModule {
     //수동주차를 진행할경우 차넘버를 받고서 처리하도록 한다.
     @ReactMethod
     public void passiveParking(String parkingCar) {
-        App.getInstance().setPassiveCheck(true);
+        App.getInstance().setPassiveCheck(true);  // 자동 추적 즉시 차단
         App.getInstance().setParkingCar(parkingCar);
         App.getInstance().setmAccelBeaconMap(new HashMap<String, AccelBeacon>());
         App.getInstance().resetDelayList();
-        // 수동 시작 시 자동 주차 상태 초기화 (자동 재개 시 처음부터 시작하도록)
-        App.getInstance().setParkingStartFlag(false);
     }
 
     @ReactMethod
     public void passiveParkingEnd(Promise promise) {
         try {
             App.getInstance().setPassiveCheck(false);
-            // 수동 주차 종료 시각 기록 → 이후 10분간 자동 주차 대기
-            App.getInstance().setPassiveParkingEndTime(System.currentTimeMillis());
+            // 수동 종료 후 자동 주차 즉시 진행 중 상태로 재개
+            App.getInstance().setParkingStartFlag(true);
 
             Context ctx = getReactApplicationContext();
             AccelBeacon beacon = PassiveParkingService.getInstance(ctx).parkingEnd();
