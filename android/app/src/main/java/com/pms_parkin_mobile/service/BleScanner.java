@@ -51,6 +51,7 @@ public class BleScanner extends Service implements SensorEventListener {
     private static final int NOTIFICATION_ID = 1;
 
     private static final String BANSUKTARGET_UUID = "20151005-8864-5654-3020-013900202001";
+    private static final String DONGTANTARGET_UUID = "20151005-8864-5654-4159-013500201901";
     // Android silent-stop 방지: 30초마다 스캔 재시작
     private static final long SCAN_RESTART_INTERVAL_MS = 30_000;
 
@@ -247,7 +248,7 @@ public class BleScanner extends Service implements SensorEventListener {
             if (beacon == null) return;
 
             // UUID 필터
-            if (!BANSUKTARGET_UUID.equalsIgnoreCase(beacon.getId1().toString())) return;
+            if (!DONGTANTARGET_UUID.equalsIgnoreCase(beacon.getId1().toString())) return;
 
             int major = beacon.getId2().toInt();
             int minor = beacon.getId3().toInt();
@@ -292,16 +293,16 @@ public class BleScanner extends Service implements SensorEventListener {
                     }
                     break;
                 case (4):
-                    if (App.getInstance().isPassiveCheck()) {
-                        // 수동 주차 중 — 자동 시작은 막고 비콘 데이터만 수집
-                        handleParkingTracking(minor, rssi);
-                        break;
-                    }
-                    if (rssi >= -90 && !App.getInstance().isParkingStartFlag()) {
-                        ParkingServiceStart();
-                    } else {
-                        handleParkingTracking(minor, rssi);
-                    }
+//                    if (App.getInstance().isPassiveCheck()) {
+//                        // 수동 주차 중 — 자동 시작은 막고 비콘 데이터만 수집
+//                        handleParkingTracking(minor, rssi);
+//                        break;
+//                    }
+//                    if (rssi >= -90 && !App.getInstance().isParkingStartFlag()) {
+//                        ParkingServiceStart();
+//                    } else {
+//                        handleParkingTracking(minor, rssi);
+//                    }
                     break;
             }
         } catch (Exception e) {

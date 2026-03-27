@@ -92,7 +92,7 @@ public class BeaconFunction {
             }
 
             // 비교 로직 (문자열 비교는 equalsIgnoreCase 권장)
-//            if (minorHex.equalsIgnoreCase(lobbyMinor)) {
+            if (minorHex.equalsIgnoreCase(lobbyMinor)) {
 
                 // RSSI 강도가 기준치보다 높을 때만 실행
                 if (rssi >= targetRssi) {
@@ -108,7 +108,7 @@ public class BeaconFunction {
                     RestController.getInstance().openLobby(newdata);
                 }else {
                     RestController.getInstance().openLobbyRssiFail(UserDataSingleton.getInstance().getUserId());
-//                }
+                }
             }
         }
     }

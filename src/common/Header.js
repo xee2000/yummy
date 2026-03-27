@@ -80,7 +80,7 @@ const Header = () => {
         {/* 오른쪽: 상태 배너 리스트 */}
         <View style={styles.statusColumn}>
           {/* 1. 백그라운드 스캔 상태 (Ble) */}
-          <View
+          {/* <View
             style={[
               styles.statusBadge,
               bleRunning ? styles.badgeOk : styles.badgeError,
@@ -97,7 +97,7 @@ const Header = () => {
             >
               주차위치 {bleRunning ? '정상' : '중지'}
             </Text>
-          </View>
+          </View> */}
 
           {/* 2. 주차/로비 서비스 설정 상태 (Lobby) */}
           <View
