@@ -62,8 +62,18 @@ public class App {
     private String TestSensorMode = "";
     private String parkingCar = "";
     private boolean TestStartFlag = false;
-    //수동 문열림 플래그
+    // 자동 문열림 플래그 (SharedPreferences로 영속 저장)
     private boolean passOpenLobbyFlag = false;
+
+    public boolean isPassOpenLobbyFlag() {
+        passOpenLobbyFlag = sharedPreferences.getBoolean("pass_open_lobby_flag", false);
+        return passOpenLobbyFlag;
+    }
+
+    public void setPassOpenLobbyFlag(boolean passOpenLobbyFlag) {
+        this.passOpenLobbyFlag = passOpenLobbyFlag;
+        sharedPreferences.edit().putBoolean("pass_open_lobby_flag", passOpenLobbyFlag).apply();
+    }
 
     private AccelBeacon parkingBeaconId;
     public int getSAVE_DELAY() {
@@ -411,6 +421,7 @@ public class App {
         longitude = sharedPreferences.getFloat("longitude", 0f);
         startFlag = sharedPreferences.getBoolean("start_flag", false);
         serviceFlag = sharedPreferences.getBoolean("service_flag", false);
+        passOpenLobbyFlag = sharedPreferences.getBoolean("pass_open_lobby_flag", false);
     }
 
     // ======== 로그아웃 or 초기화 ========

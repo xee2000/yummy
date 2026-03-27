@@ -61,17 +61,23 @@ public final class PermissionManager {
         if (isIgnoringBatteryOptimizations(ctx)) return;
 
         try {
-            // 상세 설정 화면으로 이동 (패키지명을 들고 가서 찾기 쉽게 함)
-            Intent intent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+            // 이 앱에 대한 직접 배터리 최적화 제외 다이얼로그 표시
+            Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            intent.setData(Uri.parse("package:" + ctx.getPackageName()));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             ctx.startActivity(intent);
-
-            Toast.makeText(ctx, "리스트에서 앱을 찾아 '최적화 안 함'으로 설정해주세요.", Toast.LENGTH_LONG).show();
         } catch (Exception e) {
-            // 일부 기기에서 위 인텐트가 작동하지 않을 경우 전체 설정 화면으로 이동
-            Intent intent = new Intent(Settings.ACTION_SETTINGS);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            ctx.startActivity(intent);
+            // 일부 기기에서 직접 다이얼로그 미지원 시 전체 목록 화면으로 fallback
+            try {
+                Intent intent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(intent);
+                Toast.makeText(ctx, "리스트에서 앱을 찾아 '최적화 안 함'으로 설정해주세요.", Toast.LENGTH_LONG).show();
+            } catch (Exception e2) {
+                Intent intent = new Intent(Settings.ACTION_SETTINGS);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(intent);
+            }
         }
     }
 

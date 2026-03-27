@@ -19,6 +19,8 @@
 
     <!-- 알림(안드 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 부팅 완료 시 서비스 자동 재시작 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
         <application
       android:name=".MainApplication"
@@ -49,11 +51,8 @@
                 android:exported="true"
                 android:stopWithTask="false"
                 android:foregroundServiceType="connectedDevice|location"
-                tools:ignore="Instantiatable">
-                <intent-filter>
-                    <action android:name="android.intent.action.BOOT_COMPLETED"/>
-                </intent-filter>
-            </service>
+                tools:ignore="Instantiatable" />
+
         <service
             android:name="com.pms_parkin_mobile.module.UserIntent"
             android:exported="true" />
@@ -78,6 +77,18 @@
                 android:exported="false">
                 <intent-filter>
                     <action android:name="com.pms_parkin_mobile.NOTIFICATION_DISMISSED" />
+                </intent-filter>
+            </receiver>
+
+            <!-- 부팅/재시작 시 BleScanner 자동 재시작 -->
+            <receiver
+                android:name="com.pms_parkin_mobile.receiver.BootReceiver"
+                android:enabled="true"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.BOOT_COMPLETED" />
+                    <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                    <category android:name="android.intent.category.DEFAULT" />
                 </intent-filter>
             </receiver>
     </application>

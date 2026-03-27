@@ -406,19 +406,33 @@ public class AndroidModule extends ReactContextBaseJavaModule {
             paa.requestPermissions(perms, PermissionManager.REQUEST_CODE_ALL, new PermissionListener() {
                 @Override
                 public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-                    boolean allGranted = PermissionManager.hasAllPermissions(ctx);
-
-                    // 권한이 허용되었다면 다음 단계(배터리/블루투스)로 진행하기 위해 false 반환 후 재시도 유도
-                    // 또는 여기서 직접 배터리 체크 로직을 한 번 더 실행할 수 있습니다.
-                    promise.resolve(allGranted);
+                    // 런타임 권한이 하나라도 안 됐으면 바로 false
+                    if (!PermissionManager.hasAllPermissions(ctx)) {
+                        promise.resolve(false);
+                        return true;
+                    }
+                    // 런타임 권한 통과 → 배터리 최적화 체크로 이어서 진행
+                    if (!PermissionManager.isIgnoringBatteryOptimizations(ctx)) {
+                        Log.d("AndroidModule", "배터리 최적화 제외 설정이 필요합니다.");
+                        PermissionManager.requestIgnoreBatteryOptimizations(ctx);
+                        promise.resolve(false);
+                        return true;
+                    }
+                    // 배터리 최적화 통과 → 블루투스 체크
+                    if (!PermissionManager.isBluetoothEnabled(ctx)) {
+                        Log.d("AndroidModule", "블루투스 활성화가 필요합니다.");
+                        PermissionManager.requestBluetoothEnable(a);
+                        promise.resolve(false);
+                    } else {
+                        promise.resolve(true);
+                    }
                     return true;
                 }
             });
             return;
         }
 
-        // 2. ✅ 배터리 최적화 제외 체크 (추가된 부분)
-        // 런타임 권한은 다 있는데, 배터리 최적화가 켜져 있다면 설정 화면으로 보냅니다.
+        // 2. 배터리 최적화 제외 체크
         if (!PermissionManager.isIgnoringBatteryOptimizations(ctx)) {
             Log.d("AndroidModule", "배터리 최적화 제외 설정이 필요합니다.");
             PermissionManager.requestIgnoreBatteryOptimizations(ctx);
