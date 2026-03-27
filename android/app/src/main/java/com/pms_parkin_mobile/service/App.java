@@ -113,6 +113,11 @@ public class App {
     private int mSaveCountYaw = 0;
     private boolean serviceFlag = false;
     private boolean startFlag = false;
+    // 사용자가 명시적으로 서비스를 끈 경우에만 true (transient — 재시작 여부 판단용)
+    private boolean explicitlyStopped = false;
+
+    public boolean isExplicitlyStopped() { return explicitlyStopped; }
+    public void setExplicitlyStopped(boolean v) { this.explicitlyStopped = v; }
     private String time;
     private ArrayList<Beacon> mBeaconArrayList;
     private ArrayList<GyroSensor> mGyroSensorArrayList;
