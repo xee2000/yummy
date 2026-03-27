@@ -105,6 +105,22 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            // 1. 프로젝트 이름 (원하는 이름으로 수정 가능)
+            def projectName = "pms_parkin_mobile"
+            // 2. 버전 정보 가져오기
+            def version = variant.versionName
+            // 3. 빌드 타입 (debug 또는 release)
+            def buildType = variant.buildType.name
+
+            // 최종 파일명 설정: pms_parkin_mobile-v1.0-release.apk
+            def newFileName = "${projectName}-v${version}-${buildType}.apk"
+
+            outputFileName = newFileName
+        }
+    }
 }
 
 dependencies {
