@@ -80,6 +80,16 @@
                 </intent-filter>
             </receiver>
 
+            <!-- PendingIntent 기반 BLE 스캔 결과 수신 — 백그라운드에서도 OS가 직접 전달 -->
+            <receiver
+                android:name="com.pms_parkin_mobile.receiver.BleScanReceiver"
+                android:enabled="true"
+                android:exported="false">
+                <intent-filter>
+                    <action android:name="com.pms_parkin_mobile.BLE_SCAN_RESULT" />
+                </intent-filter>
+            </receiver>
+
             <!-- 부팅/재시작 시 BleScanner 자동 재시작 -->
             <receiver
                 android:name="com.pms_parkin_mobile.receiver.BootReceiver"

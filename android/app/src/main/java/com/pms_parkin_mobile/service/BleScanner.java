@@ -9,8 +9,10 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothManager;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
@@ -41,6 +43,7 @@ import com.pms_parkin_mobile.receiver.NotificationActionReceiver;
 import org.altbeacon.beacon.Beacon;
 import org.altbeacon.beacon.BeaconParser;
 
+import java.util.Collections;
 import java.util.List;
 
 public class BleScanner extends Service implements SensorEventListener {
@@ -55,9 +58,17 @@ public class BleScanner extends Service implements SensorEventListener {
     // Android silent-stop 방지: 30초마다 스캔 재시작
     private static final long SCAN_RESTART_INTERVAL_MS = 30_000;
 
+    /**
+     * BleScanReceiver(PendingIntent 스캔)가 결과를 전달할 때 사용하는 정적 참조.
+     * BleScanReceiver는 앱 상태와 무관하게 OS가 직접 호출하므로,
+     * 서비스 인스턴스가 살아있는 한 여기를 통해 processBeaconData에 도달한다.
+     */
+    public static volatile BleScanner runningInstance;
+
     // raw BLE 스캐너 — 앱 종료 후 재시작에도 안정적으로 동작
     private BluetoothLeScanner bleScanner;
-    private ScanCallback scanCallback;
+    private ScanCallback scanCallback;          // API < 26 폴백용
+    private PendingIntent scanPendingIntent;    // API 26+ 주 스캔 방식
     private boolean isScanning = false;
 
     private final Runnable scanRestartRunnable = new Runnable() {
@@ -110,6 +121,7 @@ public class BleScanner extends Service implements SensorEventListener {
     public void onCreate() {
         super.onCreate();
         context = this;
+        runningInstance = this;
         Log.d(TAG, "onCreate()");
         try {
             createNotificationChannel();
@@ -158,11 +170,15 @@ public class BleScanner extends Service implements SensorEventListener {
     public int onStartCommand(Intent intent, int flags, int startId) {
         try {
             Log.d(TAG, "onStartCommand()");
-            if (intent != null && ACTION_RESTORE_NOTIFICATION.equals(intent.getAction())) {
+            boolean restoreNotification = intent != null && ACTION_RESTORE_NOTIFICATION.equals(intent.getAction());
+            if (restoreNotification) {
                 BluetoothAdapter bt = BluetoothAdapter.getDefaultAdapter();
                 startAsForeground(bt != null && bt.isEnabled());
-            }
-            if (!isScanning) {
+                // 알림 삭제 시 OS가 PendingIntent 스캔을 취소하므로 강제 재시작
+                Log.d(TAG, "onStartCommand() - 알림 복구 후 스캔 강제 재시작");
+                stopBeaconScan();
+                startBeaconScan();
+            } else if (!isScanning) {
                 BluetoothAdapter bt = BluetoothAdapter.getDefaultAdapter();
                 if (bt != null && bt.isEnabled()) {
                     startBeaconScan();
@@ -171,16 +187,14 @@ public class BleScanner extends Service implements SensorEventListener {
         } catch (Exception e) {
             sendServerError("onStartCommand Error: " + e.getMessage());
         }
-        try {
-            return App.getInstance().isServiceFlag() ? START_STICKY : START_NOT_STICKY;
-        } catch (Exception e) {
-            return START_STICKY;
-        }
+        return START_STICKY;
     }
 
     private void startBeaconScan() {
         try {
-            BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+            // BluetoothManager 경유로 획득 — getDefaultAdapter()보다 재시작 후 안정적
+            BluetoothManager btManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+            BluetoothAdapter adapter = btManager != null ? btManager.getAdapter() : null;
             if (adapter == null || !adapter.isEnabled()) {
                 Log.d(TAG, "startBeaconScan - Bluetooth 비활성화 상태");
                 return;
@@ -191,41 +205,72 @@ public class BleScanner extends Service implements SensorEventListener {
                 return;
             }
 
-            ScanSettings settings = new ScanSettings.Builder()
-                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                    .build();
-
-            scanCallback = new ScanCallback() {
-                @Override
-                public void onScanResult(int callbackType, ScanResult result) {
-                    parseIBeacon(result);
-                }
-
-                @Override
-                public void onBatchScanResults(List<ScanResult> results) {
-                    for (ScanResult r : results) parseIBeacon(r);
-                }
-
-                @Override
-                public void onScanFailed(int errorCode) {
-                    // 1=ALREADY_STARTED, 2=스로틀링, 3=INTERNAL_ERROR
-                    Log.e(TAG, "SCAN 실패 errorCode=" + errorCode
-                            + (errorCode == 2 ? " (앱 스로틀링: 빠른 재시작 반복으로 제한됨)" : ""));
-                    isScanning = false;
-                    sendServerError("onScanFailed errorCode=" + errorCode);
-                    if (errorCode != 1) {
-                        handler.postDelayed(() -> startBeaconScan(), 5000);
-                    }
-                }
-            };
-
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN)
                     != PackageManager.PERMISSION_GRANTED) {
                 return;
             }
-            bleScanner.startScan(null, settings, scanCallback);
-            isScanning = true;
-            Log.d(TAG, "startBeaconScan - raw BLE 스캔 시작 (SCAN_MODE_LOW_LATENCY)");
+
+            // iBeacon 하드웨어 필터: Apple company ID=0x004C, iBeacon type=0x02 length=0x15
+            ScanFilter iBeaconFilter = new ScanFilter.Builder()
+                    .setManufacturerData(0x004C,
+                            new byte[]{0x02, 0x15},
+                            new byte[]{(byte) 0xFF, (byte) 0xFF})
+                    .build();
+
+            ScanSettings settings = new ScanSettings.Builder()
+                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                    .setReportDelay(0)
+                    .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+                    .setNumOfMatches(ScanSettings.MATCH_NUM_ONE_ADVERTISEMENT)
+                    .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                    .build();
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // ── PendingIntent 방식 ──────────────────────────────────────────────
+                // 앱이 백그라운드/스와이프 상태여도 OS가 BleScanReceiver에 직접 결과 전달.
+                // 콜백 방식은 앱 프로세스가 포그라운드 Activity 없으면 OS가 억제함.
+                Intent scanIntent = new Intent(getApplicationContext(),
+                        com.pms_parkin_mobile.receiver.BleScanReceiver.class);
+                scanIntent.setAction("com.pms_parkin_mobile.BLE_SCAN_RESULT");
+                // ⚠️ FLAG_MUTABLE 필수: BLE 시스템이 스캔 결과 extras를 intent에 채워야 하므로
+                //    FLAG_IMMUTABLE 이면 extras 추가가 막혀 결과가 아예 전달되지 않음
+                int piFlags;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    piFlags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE;
+                } else {
+                    piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+                }
+                scanPendingIntent = PendingIntent.getBroadcast(getApplicationContext(), 0, scanIntent, piFlags);
+
+                bleScanner.startScan(Collections.singletonList(iBeaconFilter), settings, scanPendingIntent);
+                isScanning = true;
+                Log.d(TAG, "startBeaconScan - PendingIntent 스캔 시작 (백그라운드 완전 지원)");
+            } else {
+                // ── 콜백 방식 폴백 (API < 26) ───────────────────────────────────────
+                scanCallback = new ScanCallback() {
+                    @Override
+                    public void onScanResult(int callbackType, ScanResult result) {
+                        parseIBeacon(result);
+                    }
+                    @Override
+                    public void onBatchScanResults(List<ScanResult> results) {
+                        for (ScanResult r : results) parseIBeacon(r);
+                    }
+                    @Override
+                    public void onScanFailed(int errorCode) {
+                        Log.e(TAG, "SCAN 실패 errorCode=" + errorCode
+                                + (errorCode == 2 ? " (스로틀링)" : ""));
+                        isScanning = false;
+                        sendServerError("onScanFailed errorCode=" + errorCode);
+                        if (errorCode != 1) {
+                            handler.postDelayed(() -> startBeaconScan(), 5000);
+                        }
+                    }
+                };
+                bleScanner.startScan(Collections.singletonList(iBeaconFilter), settings, scanCallback);
+                isScanning = true;
+                Log.d(TAG, "startBeaconScan - 콜백 스캔 시작 (API<26 폴백)");
+            }
 
             // 기존 예약 제거 후 30초 뒤 재시작 예약 (silent-stop 방지)
             handler.removeCallbacks(scanRestartRunnable);
@@ -234,6 +279,11 @@ public class BleScanner extends Service implements SensorEventListener {
             isScanning = false;
             sendServerError("startBeaconScan Error: " + e.getMessage());
         }
+    }
+
+    /** BleScanReceiver(PendingIntent 스캔)에서 호출 — 서비스 인스턴스 통해 비컨 처리 */
+    public void onPendingIntentResult(ScanResult result) {
+        parseIBeacon(result);
     }
 
     private void parseIBeacon(ScanResult result) {
@@ -265,19 +315,25 @@ public class BleScanner extends Service implements SensorEventListener {
         // 정기 재시작 타이머 취소
         if (handler != null) handler.removeCallbacks(scanRestartRunnable);
         try {
-            if (bleScanner != null && scanCallback != null && isScanning) {
+            if (bleScanner != null && isScanning) {
                 if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN)
                         != PackageManager.PERMISSION_GRANTED) {
                     return;
                 }
-                bleScanner.stopScan(scanCallback);
-                Log.d(TAG, "stopBeaconScan - 스캔 중지");
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && scanPendingIntent != null) {
+                    bleScanner.stopScan(scanPendingIntent);
+                    Log.d(TAG, "stopBeaconScan - PendingIntent 스캔 중지");
+                } else if (scanCallback != null) {
+                    bleScanner.stopScan(scanCallback);
+                    Log.d(TAG, "stopBeaconScan - 콜백 스캔 중지");
+                }
             }
         } catch (Exception e) {
             sendServerError("stopBeaconScan Error: " + e.getMessage());
         } finally {
             isScanning = false;
             scanCallback = null;
+            scanPendingIntent = null;
         }
     }
 
@@ -422,11 +478,11 @@ public class BleScanner extends Service implements SensorEventListener {
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         super.onTaskRemoved(rootIntent);
-        if (App.getInstance().isServiceFlag()) {
+        if (!App.getInstance().isExplicitlyStopped()) {
             Log.d(TAG, "onTaskRemoved() - 서비스 재시작 예약");
             scheduleServiceRestart();
         } else {
-            Log.d(TAG, "onTaskRemoved() - ServiceFlag OFF, 재시작 안 함");
+            Log.d(TAG, "onTaskRemoved() - 사용자 명시 중지, 재시작 안 함");
         }
     }
 
@@ -449,12 +505,14 @@ public class BleScanner extends Service implements SensorEventListener {
 
     @Override
     public void onDestroy() {
+        runningInstance = null;
         if (handler != null) handler.removeCallbacksAndMessages(null);
-        if (App.getInstance().isServiceFlag()) {
+        if (!App.getInstance().isExplicitlyStopped()) {
             Log.d(TAG, "onDestroy() - 서비스 재시작 예약");
             scheduleServiceRestart();
         } else {
-            Log.d(TAG, "onDestroy() - ServiceFlag OFF, 재시작 안 함");
+            Log.d(TAG, "onDestroy() - 사용자 명시 중지, 재시작 안 함");
+            App.getInstance().setExplicitlyStopped(false);
         }
         stopBeaconScan();
         if (sensorManager != null) sensorManager.unregisterListener(this);

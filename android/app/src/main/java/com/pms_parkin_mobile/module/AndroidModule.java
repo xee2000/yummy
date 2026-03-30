@@ -303,6 +303,7 @@ public class AndroidModule extends ReactContextBaseJavaModule {
             }
         } else {
             App.getInstance().setServiceFlag(false);
+            App.getInstance().setExplicitlyStopped(true);
             Log.d("SERVICE_FLAG", "서비스 중지 요청");
             Intent intent = new Intent(ctx, BleScanner.class);
             ctx.stopService(intent);
