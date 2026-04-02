@@ -38,9 +38,8 @@ class PassiveParkingService private constructor(context: Context) {
         }
 
         var strongestBeacon: AccelBeacon? = null
-        var maxAverageRssi = -999.0
+        var maxScore = -Double.MAX_VALUE
 
-        // 맵에 쌓인 모든 비컨 후보들을 순회
         for (entry in beaconMap) {
             val beacon = entry.value
             val delayList = beacon.delayList
@@ -52,13 +51,18 @@ class PassiveParkingService private constructor(context: Context) {
                 continue
             }
 
-            // 1. 해당 비컨의 모든 RSSI 합계 구하기
+            // Minor 33000대 필터링
+            val minorValue = beacon.minor?.toString()?.toIntOrNull() ?: 0
+            if (minorValue > 33000) {
+                Log.w(TAG, "   └─ [건너뜀] Minor 33000대 노이즈 비컨 제외")
+                continue
+            }
+
             var rssiSum = 0.0
             var validCount = 0
-            val rssiDetails = StringBuilder() // 로그용: 수집된 모든 RSSI 나열
+            val rssiDetails = StringBuilder()
 
             for (record in delayList) {
-                // record 예: "-75_10"
                 val split = record?.split("_")
                 val rawRssi = split?.getOrNull(0)?.toDoubleOrNull()
                 val delay = split?.getOrNull(1) ?: "?"
@@ -75,35 +79,41 @@ class PassiveParkingService private constructor(context: Context) {
                 continue
             }
 
-            // 2. 평균 RSSI 계산
             val averageRssi = rssiSum / validCount
 
             Log.v(TAG, "   └─ 데이터 목록: $rssiDetails")
             Log.d(TAG, "   └─ 중간 산출: 합계 ${rssiSum.toInt()}, 횟수 $validCount -> 평균 %.2f dBm".format(averageRssi))
 
-            // 3. 평균값이 가장 높은 비컨을 선택
-            if (strongestBeacon == null || averageRssi > maxAverageRssi) {
+            // 가중치 점수 계산
+            // 데이터 수에 따라 보정값 부여
+            val countBonus = when {
+                validCount >= 3 -> 10.0   // 3개 이상 +10점
+                validCount == 2 -> 5.0    // 2개 +5점
+                else -> -10.0             // 1개 -10점 패널티
+            }
+            val score = averageRssi + countBonus
+
+            Log.d(TAG, "   └─ 가중치 점수: ${"%.2f".format(score)} (평균 ${"%.2f".format(averageRssi)} + 보정 $countBonus)")
+
+            if (strongestBeacon == null || score > maxScore) {
                 if (strongestBeacon != null) {
-                    Log.v(TAG, "   ⭐ [갱신] 기존 최고점(${maxAverageRssi.toInt()})보다 높음 -> 새로운 1위 후보!")
+                    Log.v(TAG, "   ⭐ [갱신] 기존 최고점(${maxScore.toInt()})보다 높음 -> 새로운 1위 후보!")
                 } else {
                     Log.v(TAG, "   ⭐ [최초 선정] 첫 번째 유효 후보 등록")
                 }
-                maxAverageRssi = averageRssi
+                maxScore = score
                 strongestBeacon = beacon
             }
             Log.d(TAG, "----------------------------------------------")
         }
 
-        // 최종 결과 출력
         Log.i(TAG, "==============================================")
         if (strongestBeacon != null) {
             Log.i(TAG, "🏆 [최종 분석 완료]")
             Log.i(TAG, "   📍 결정된 비컨 ID : ${strongestBeacon.beaconId}")
-            Log.i(TAG, "   📍 최종 평균 RSSI : %.2f dBm".format(maxAverageRssi))
+            Log.i(TAG, "   📍 최종 가중치 점수 : %.2f".format(maxScore))
             Log.i(TAG, "   📍 수신 데이터 수 : ${strongestBeacon.delayList?.size ?: 0}개")
-
-            // 전송을 위해 RSSI 업데이트
-            strongestBeacon.rssi = maxAverageRssi.toInt().toString()
+            strongestBeacon.rssi = maxScore.toInt().toString()
         } else {
             Log.e(TAG, "❌ [분석 종료] 적합한 비컨을 찾지 못했습니다.")
         }
@@ -111,7 +121,6 @@ class PassiveParkingService private constructor(context: Context) {
 
         return strongestBeacon
     }
-
     companion object {
         private const val TAG = "PassiveParkingService"
         private var instance: PassiveParkingService? = null

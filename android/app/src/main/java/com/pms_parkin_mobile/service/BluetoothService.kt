@@ -281,7 +281,15 @@ class BluetoothService : Service() {
         Timber.i("$TAG: onDestroy")
 
         handler.removeCallbacksAndMessages(null)
-        stopBluetoothScanning()
+
+        // PendingIntent 기반 스캔(Android O+)은 OS 레벨에서 유지 → 앱이 죽어도 스캔 계속
+        // 서비스 재시작 후 동일 PendingIntent(FLAG_UPDATE_CURRENT)로 재등록하면 워밍업 없이 이어짐
+        // Callback 기반 스캔(Android O 미만)은 프로세스 종료 시 자동 소멸이므로 명시적 중지
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            try { leScanner?.stopScan(scanCallback) } catch (_: Exception) {}
+        }
+        // isStartScanning 플래그는 초기화 (새 인스턴스 시작 시 재등록하도록)
+        isStartScanning = false
         clearRssiEma()
 
         try { unregisterReceiver(bluetoothReceiver) } catch (_: Exception) {}
@@ -482,12 +490,14 @@ class BluetoothService : Service() {
         } else {
             PendingIntent.getService(applicationContext, 1, intent, flags)
         }
-        (getSystemService(Context.ALARM_SERVICE) as? AlarmManager)
-            ?.setAndAllowWhileIdle(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                SystemClock.elapsedRealtime() + 1_000,
-                pi
-            )
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val triggerAt = SystemClock.elapsedRealtime() + 300L
+        // setExactAndAllowWhileIdle: Doze 상태에서도 정확한 시간에 서비스 재시작
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+        } else {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+        }
     }
 
     // =========================================================================
