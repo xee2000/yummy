@@ -464,12 +464,13 @@ class BluetoothService : Service() {
         } else {
             PendingIntent.getService(applicationContext, 2, intent, flags)
         }
-        (getSystemService(Context.ALARM_SERVICE) as? AlarmManager)
-            ?.setExactAndAllowWhileIdle(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                SystemClock.elapsedRealtime() + 60_000L,
-                pi
-            )
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val triggerAt = SystemClock.elapsedRealtime() + 60_000L
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+        } else {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+        }
     }
 
     fun scheduleServiceRestart() {
