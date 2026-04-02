@@ -211,14 +211,14 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadInitialData} />}
       >
         <View style={styles.inner}>
-          {/* <View style={styles.carSelectBox}>
+          <View style={styles.carSelectBox}>
             <Text style={styles.carSelectLabel}>선택 차량</Text>
             <TouchableOpacity style={styles.carSelectBtn} onPress={() => setCarsModalOpen(true)} disabled={passiveBusy}>
               <Text style={styles.carSelectText}>{selectedCarNumber || '차량을 선택하세요'}</Text>
             </TouchableOpacity>
-          </View> */}
+          </View>
 
-          {/* <View style={styles.centerButtonArea}>
+          <View style={styles.centerButtonArea}>
             <TouchableOpacity
               style={[styles.btn, styles.btnOutline, (passiveBusy || !selectedCarNumber) && styles.btnDisabled]}
               onPress={handleManualParkPosition}
@@ -231,7 +231,7 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
                 </View>
               ) : <Text style={styles.btnOutlineText}>수동 주차위치 수집</Text>}
             </TouchableOpacity>
-          </View> */}
+          </View>
 
           <View style={styles.lobbyArea}>
             <Text style={styles.sectionTitle}>공동현관 제어</Text>
@@ -245,7 +245,7 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
       </ScrollView>
 
       {/* 차량 선택 모달 */}
-      {/* <Modal visible={carsModalOpen} transparent={true} animationType="slide">
+      <Modal visible={carsModalOpen} transparent={true} animationType="slide">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCarsModalOpen(false)}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}><Text style={styles.modalTitle}>차량 선택</Text></View>
@@ -262,10 +262,10 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
             />
           </View>
         </TouchableOpacity>
-      </Modal> */}
+      </Modal>
 
       {/* 위치 확인 모달 (parkingResult가 있을 때만 내용 표시) */}
-      {/* <Modal visible={confirmModalOpen} animationType="fade" transparent={true}>
+      <Modal visible={confirmModalOpen} animationType="fade" transparent={true}>
         <View style={styles.modalFullOverlay}>
           {parkingResult && (
             <View style={styles.confirmModalContent}>
@@ -285,7 +285,7 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
             </View>
           )}
         </View>
-      </Modal> */}
+      </Modal>
     </SafeScreen>
   );
 };

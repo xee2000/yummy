@@ -126,7 +126,7 @@ const Option = ({ navigation }) => {
         <Text style={styles.menuText}>앱 설정으로 이동</Text>
       </TouchableOpacity>
 
-      {/* ✅ 주차위치 서비스 영역 (Switch 추가)
+      {/* ✅ 주차위치 서비스 영역 (Switch 추가) */}
       <View style={styles.itemRow}>
         <View>
           <Text style={styles.itemLabel}>주차위치 서비스 상태</Text>
@@ -144,7 +144,7 @@ const Option = ({ navigation }) => {
             style={{ marginLeft: 8 }}
           />
         </View>
-      </View> */}
+      </View>
 
       {/* ✅ 자동 문열림 서비스 영역 */}
       <View style={styles.itemRow}>

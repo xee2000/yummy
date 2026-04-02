@@ -13,17 +13,17 @@ import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.pms_parkin_mobile.module.ParkingPackage
 import com.pms_parkin_mobile.service.App
-import com.pms_parkin_mobile.service.BleScanner
-
+import com.pms_parkin_mobile.service.BluetoothService
+import com.pms_parkin_mobile.service.SensorService
 
 class MainApplication : Application(), ReactApplication {
 
   companion object {
-    @Volatile private var instance: MainApplication? = null
+    @Volatile private var _instance: MainApplication? = null
 
     @JvmStatic
     fun getInstance(): MainApplication =
-      instance ?: throw IllegalStateException("MainApplication is not initialized yet.")
+      _instance ?: throw IllegalStateException("MainApplication is not initialized yet.")
 
     @JvmStatic
     fun getAppContext(): Context = getInstance().applicationContext
@@ -40,19 +40,21 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
-    instance = this
+    _instance = this
     Log.d("MainApplication", "onCreate called")
-    App.getInstance().init(applicationContext)
 
-    // 프로세스 재시작(Android Studio 재시작, 시스템 kill 후 복구 등) 시
-    // React Native 초기화 전에 serviceFlag=true이면 즉시 서비스 재기동
-    if (App.getInstance().isServiceFlag()) {
-      Log.d("MainApplication", "serviceFlag=true → BleScanner 자동 재시작")
-      val serviceIntent = Intent(applicationContext, BleScanner::class.java)
+    // 정상적으로 스펠링이 입력된 부분
+    App.instance.init(applicationContext)
+
+    // 💡 수정 완료: instace -> instance 오타 수정 및 괄호() 제거
+    if (App.instance.isServiceFlag) {
+      Log.d("MainApplication", "serviceFlag=true → BluetoothService / SensorService 자동 시작")
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        ContextCompat.startForegroundService(applicationContext, serviceIntent)
+        ContextCompat.startForegroundService(applicationContext, Intent(applicationContext, BluetoothService::class.java))
+        applicationContext.startService(Intent(applicationContext, SensorService::class.java))
       } else {
-        applicationContext.startService(serviceIntent)
+        applicationContext.startService(Intent(applicationContext, BluetoothService::class.java))
+        applicationContext.startService(Intent(applicationContext, SensorService::class.java))
       }
     }
 

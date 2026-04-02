@@ -18,7 +18,7 @@ const MainBottomTabs = () => {
         tabBarInactiveTintColor: '#999',
       }}
     >
-      {/* <Tab.Screen
+      <Tab.Screen
         name="Parking"
         component={Parking}
         options={{
@@ -27,7 +27,7 @@ const MainBottomTabs = () => {
             <Icon name="map-outline" color={color} size={size} />
           ),
         }}
-      /> */}
+      />
       <Tab.Screen
         name="Home"
         component={Home}

@@ -16,7 +16,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- 알림(안드 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 부팅 완료 시 서비스 자동 재시작 -->
@@ -46,12 +46,20 @@
       </activity>
 
             <service
-                android:name="com.pms_parkin_mobile.service.BleScanner"
+                android:name="com.pms_parkin_mobile.service.BluetoothService"
                 android:enabled="true"
                 android:exported="true"
                 android:stopWithTask="false"
-                android:foregroundServiceType="connectedDevice|location"
+                android:foregroundServiceType="connectedDevice"
                 tools:ignore="Instantiatable" />
+            <service
+                android:name="com.pms_parkin_mobile.service.SensorService"
+                android:enabled="true"
+                android:exported="true"
+                android:stopWithTask="false"
+                android:foregroundServiceType="location"
+                tools:ignore="Instantiatable" />
+
 
         <service
             android:name="com.pms_parkin_mobile.module.UserIntent"
@@ -60,15 +68,13 @@
             <service android:name=".foreground.ParkingSuccessAlarm"
                 android:enabled="true"
                 android:exported="true"
-                android:foregroundServiceType="location"
-                tools:ignore="ForegroundServicePermission">
+                >
             </service>
 
             <service android:name=".foreground.OpenLobbyAlarm"
                 android:enabled="true"
                 android:exported="true"
-                android:foregroundServiceType="location"
-                tools:ignore="ForegroundServicePermission">
+                android:foregroundServiceType="dataSync">
             </service>
 
             <receiver
