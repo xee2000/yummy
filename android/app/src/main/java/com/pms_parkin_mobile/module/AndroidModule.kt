@@ -171,22 +171,26 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
             App.instance.isParkingStartFlag = true
 
             val ctx: Context = reactApplicationContext
-            val beacon = PassiveParkingService.getInstance(ctx).parkingEnd()
+            // 💡 이제 결과값은 AccelBeacon 객체가 아니라 String(비컨 ID)입니다.
+            val finalBeaconId = PassiveParkingService.getInstance(ctx).parkingEnd()
 
-            if (beacon == null) {
+            if (finalBeaconId == null) {
                 promise.resolve(null)
                 return
             }
 
+            // JS로 전달할 맵 구성
             val map = Arguments.createMap().apply {
-                // 💡 rssi가 String? 이므로 안전하게 숫자로 변환 처리 (에러 방지)
-                putString("beaconId", beacon.beaconId)
-                putInt("rssi", beacon.rssi?.toIntOrNull() ?: -100)
+                // finalBeaconId 자체가 ID이므로 그대로 넣습니다.
+                putString("beaconId", finalBeaconId)
+                // 삼각측량 결과에서는 단일 RSSI 의미가 없으므로 0이나 적당한 값을 넣거나 제외합니다.
+                putInt("rssi", 0)
             }
 
-            Log.d("Passive" ,"수동주차위치 결과 map : " + map.toString())
+            Log.d("Passive" ,"수동주차위치 결과 map : $map")
             promise.resolve(map)
 
+            // 데이터 초기화
             App.instance.mAccelBeaconMap.clear()
             App.instance.resetDelayList()
 
@@ -197,7 +201,6 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
             promise.reject("PASSIVE_PARKING_END_ERROR", e)
         }
     }
-
     @ReactMethod
     fun CheckPermissionsStatus(promise: Promise) {
         try {
@@ -211,8 +214,24 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
 
     @ReactMethod
     fun passOpenLobbyFlag(flag: Boolean) {
-        Log.d("AndroidModule", "flag : " + flag)
+        Log.d("AndroidModule", "passOpenLobbyFlag : $flag → 스캔 재시작")
         App.instance.isPassOpenLobbyFlag = flag
+        // 플래그 변경 시 스캔 재시작 (멈춘 상태에서 복구 포함)
+        handler.post {
+            val service = BluetoothService.getInstance()
+            if (service != null) {
+                service.resetAndRestartScanning()
+            } else {
+                // 서비스 자체가 죽어있으면 강제 재시작
+                val ctx: Context = reactApplicationContext
+                val intent = Intent(ctx, BluetoothService::class.java)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    androidx.core.content.ContextCompat.startForegroundService(ctx, intent)
+                } else {
+                    ctx.startService(intent)
+                }
+            }
+        }
     }
 
     @ReactMethod

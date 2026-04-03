@@ -62,6 +62,9 @@ class BluetoothService : Service() {
         // 60초 동안 결과 없으면 silent dead 판단
         private const val SCAN_DEAD_TIMEOUT_MS = 60_000L
 
+        // 5분마다 강제 스캔 갱신 (lastScanResultAt=0 상태에서 silent dead 장기 방치 방지)
+        private const val SCAN_FORCE_REFRESH_INTERVAL_MS = 5 * 60_000L
+
         private const val RSSI_EMA_ALPHA = 0.3
         private const val RSSI_EMA_TIMEOUT_MS = 5_000L
 
@@ -147,6 +150,28 @@ class BluetoothService : Service() {
     private fun clearRssiEma() {
         rssiEmaMap.clear()
         rssiLastSeenMap.clear()
+    }
+
+    // =========================================================================
+    // 강제 갱신 Runnable
+    // 5분마다 무조건 스캔 재등록
+    // lastScanResultAt=0 고착 상태(비컨 없는 환경에서 silent dead 방치)를 방지
+    // =========================================================================
+    private val scanForceRefreshRunnable = Runnable {
+        if (isStartScanning && bluetoothAdapter.isEnabled) {
+            Timber.i("$TAG: 강제 스캔 갱신 (30분 주기) → reRegisterPendingIntentScan")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                reRegisterPendingIntentScan()
+            } else {
+                resetAndRestartScanning()
+            }
+        }
+        scheduleForceRefresh()
+    }
+
+    private fun scheduleForceRefresh() {
+        handler.removeCallbacks(scanForceRefreshRunnable)
+        handler.postDelayed(scanForceRefreshRunnable, SCAN_FORCE_REFRESH_INTERVAL_MS)
     }
 
     // =========================================================================
@@ -258,7 +283,12 @@ class BluetoothService : Service() {
                     resetAndRestartScanning()
                 }
                 isStartScanning -> {
-                    Timber.i("$TAG: 이미 스캔 중 → 세션 유지")
+                    // 이미 스캔 중이어도 PendingIntent 재등록
+                    // OS가 장시간 Doze 후 스캔을 취소했을 수 있으므로 항상 재등록으로 복구
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        reRegisterPendingIntentScan()
+                    }
+                    Timber.i("$TAG: 스캔 중 → PendingIntent 재등록")
                 }
                 else -> {
                     setupScanComponents()
@@ -268,6 +298,7 @@ class BluetoothService : Service() {
         }
 
         scheduleWatchdog()
+        scheduleDeepWatchdog()
         return START_STICKY
     }
 
@@ -375,6 +406,7 @@ class BluetoothService : Service() {
             isStartScanning = true
             scanStartTimestamps.addLast(now)
             scheduleHealthCheck()
+            scheduleForceRefresh()
 
         } catch (e: Exception) {
             Timber.e("$TAG: startScan 실패: ${e.message}")
@@ -383,6 +415,7 @@ class BluetoothService : Service() {
 
     fun stopBluetoothScanning() {
         handler.removeCallbacks(scanHealthCheckRunnable)
+        handler.removeCallbacks(scanForceRefreshRunnable)
         if (!isStartScanning) return
 
         try {
@@ -405,6 +438,7 @@ class BluetoothService : Service() {
     fun resetAndRestartScanning() {
         Timber.i("$TAG: leScanner 재생성 시작")
         handler.removeCallbacks(scanHealthCheckRunnable)
+        handler.removeCallbacks(scanForceRefreshRunnable)
         try {
             if (isStartScanning) {
                 try {
@@ -478,6 +512,58 @@ class BluetoothService : Service() {
             alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
         } else {
             alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+        }
+    }
+
+    // 딥 워치독: 10분 간격, 60초 워치독 체인이 끊겨도 복구
+    // requestCode=3 으로 scheduleWatchdog(requestCode=2)와 충돌 없음
+    private fun scheduleDeepWatchdog() {
+        val intent = Intent(applicationContext, BluetoothService::class.java)
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            PendingIntent.getForegroundService(applicationContext, 3, intent, flags)
+        } else {
+            PendingIntent.getService(applicationContext, 3, intent, flags)
+        }
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val triggerAt = SystemClock.elapsedRealtime() + 10 * 60_000L
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+        } else {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+        }
+        Timber.d("$TAG: 딥 워치독 예약 (10분 후)")
+    }
+
+    private fun reRegisterPendingIntentScan() {
+        if (!bluetoothAdapter.isEnabled) return
+        if (leScanner == null) leScanner = bluetoothAdapter.bluetoothLeScanner
+        val scanner = leScanner ?: return
+        if (scanFilters.isEmpty()) setupScanComponents()
+
+        // API 26 이상만 PendingIntent 스캔 가능
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            Timber.w("$TAG: API 26 미만 → PendingIntent 스캔 불가 → Callback 방식으로 대체")
+            if (!isStartScanning) startBluetoothScanning()
+            return
+        }
+
+        try {
+            val scanIntent = Intent(applicationContext, com.pms_parkin_mobile.receiver.BleScanReceiver::class.java)
+                .setAction("com.pms_parkin_mobile.BLE_SCAN_RESULT")
+            val piFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val pi = PendingIntent.getBroadcast(applicationContext, 0, scanIntent, piFlags)
+            scanner.startScan(scanFilters, scanSettings, pi)
+            scanPendingIntent = pi
+            Timber.i("$TAG: PendingIntent 재등록 성공")
+        } catch (e: Exception) {
+            Timber.e("$TAG: PendingIntent 재등록 실패 → 전체 재생성: ${e.message}")
+            handler.post { resetAndRestartScanning() }
         }
     }
 
