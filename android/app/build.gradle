@@ -81,7 +81,7 @@ android {
     defaultConfig {
         applicationId "com.pms_parkin_mobile"
         minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
+        targetSdkVersion 33
         versionCode 1
         versionName "1.0"
     }
@@ -130,6 +130,7 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.+")
     implementation("org.altbeacon:android-beacon-library:2.+")
     implementation ("com.jakewharton.timber:timber:5.0.1")
+    implementation 'androidx.work:work-runtime-ktx:2.11.2'
     compileOnly "org.projectlombok:lombok:1.18.30"
     annotationProcessor "org.projectlombok:lombok:1.18.30"
     if (hermesEnabled.toBoolean()) {

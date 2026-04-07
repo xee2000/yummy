@@ -20,7 +20,7 @@ import com.pms_parkin_mobile.service.BluetoothService
 import com.pms_parkin_mobile.service.PassiveParkingService
 import com.pms_parkin_mobile.service.SensorService
 import com.pms_parkin_mobile.util.PermissionManager
-
+import com.pms_parkin_mobile.receiver.BleScanReceiver
 class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
 
     private val handler = Handler(Looper.getMainLooper())
@@ -41,6 +41,7 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
             ctx.startService(Intent(ctx, BluetoothService::class.java))
             ctx.startService(Intent(ctx, SensorService::class.java))
         }
+
     }
 
     @ReactMethod
@@ -108,6 +109,7 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
                 ctx.startService(Intent(ctx, BluetoothService::class.java))
                 ctx.startService(Intent(ctx, SensorService::class.java))
             }
+            BleScanReceiver.startAlarm(ctx)  // ← 추가
         } else {
             App.instance.isServiceFlag = false
             App.instance.isExplicitlyStopped = true

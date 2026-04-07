@@ -1,37 +1,15 @@
 package com.pms_parkin_mobile.service
 
 import android.annotation.SuppressLint
-import android.app.AlarmManager
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.app.Service
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothManager
-import android.bluetooth.le.BluetoothLeScanner
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
-import android.bluetooth.le.ScanRecord
-import android.bluetooth.le.ScanResult
-import android.bluetooth.le.ScanSettings
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
+import android.app.*
+import android.bluetooth.*
+import android.bluetooth.le.*
+import android.content.*
 import android.content.pm.ServiceInfo
-import android.os.Build
+import android.os.*
 import android.util.Log
-import android.os.Handler
-import android.os.IBinder
-import android.os.Looper
-import android.os.SystemClock
-import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import com.pms_parkin_mobile.R
-import com.pms_parkin_mobile.service.BeaconProcessor
-import com.pms_parkin_mobile.service.BeaconTimerManager
-import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 
 @SuppressLint("MissingPermission")
@@ -43,303 +21,178 @@ class BluetoothService : Service() {
         const val FOREGROUND_NOTIFICATION_ID = 821
 
         const val UUID_DONGTAN = "20151005-8864-5654-4159-013500201901"
-        const val UUID_BANSEOK = "20151005-8864-5654-3020-013900202001"
-        const val UUID_PRIMO = "20151005-8864-5654-4623-010400240401"
-
-        private const val BLE_DOORPHONE_SERVICE_UUID = "0000f1ae-0000-1000-8000-00805f9b34fb"
-
         private const val BEACON_MANUFACTURER_ID = 0x4C
         private const val BEACON_SUBTYPE = 0x02
         private const val BEACON_SUBTYPE_LENGTH = 0x15
 
-        // Android throttle 방지: 30초 내 최대 4회
         private const val SCAN_THROTTLE_WINDOW_MS = 30_000L
         private const val SCAN_THROTTLE_MAX_COUNT = 4
-
-        // 30초마다 헬스 체크
         private const val SCAN_HEALTH_CHECK_INTERVAL_MS = 30_000L
-
-        // 60초 동안 결과 없으면 silent dead 판단
-        private const val SCAN_DEAD_TIMEOUT_MS = 60_000L
-
-        // 5분마다 강제 스캔 갱신 (너무 자주 리셋하면 BT 스택 zombie화 → 2시간 후 사망)
-        private const val SCAN_FORCE_REFRESH_INTERVAL_MS = 5 * 60_000L
+        private const val SCAN_DEAD_TIMEOUT_MS = 90_000L
 
         private const val RSSI_EMA_ALPHA = 0.3
         private const val RSSI_EMA_TIMEOUT_MS = 5_000L
 
-        private const val ACTION_NOTIFICATION_DISMISSED = "com.pms_parkin_mobile.NOTIFICATION_DISMISSED"
-
-        @Volatile
-        var runningInstance: BluetoothService? = null
+        @Volatile var runningInstance: BluetoothService? = null
             private set
 
-        @Volatile
-        private var sendDetectBeaconToFlutter = false
-
         fun getInstance(): BluetoothService? = runningInstance
-
         fun isBeaconScanning(): Boolean = runningInstance?.isStartScanning == true
 
-        fun getBluetoothState(context: Context): String {
-            val manager = context.getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager
-            return when (manager?.adapter?.state) {
-                BluetoothAdapter.STATE_ON -> "PoweredOn"
-                BluetoothAdapter.STATE_OFF -> "PoweredOff"
-                else -> "Unsupported"
-            }
-        }
-
-        fun setSendDetectBeaconToFlutter(value: Boolean) {
-            sendDetectBeaconToFlutter = value
-        }
-
-        fun getSendDetectBeaconToFlutter(): Boolean = sendDetectBeaconToFlutter
-
-        @Volatile
-        private var lastBeaconDetectedAt: Long = 0L
-
-        fun updateLastBeaconDetectedAt() {
-            lastBeaconDetectedAt = System.currentTimeMillis()
-        }
-
-        fun getLastBeaconDetectedAt(): String {
-            if (lastBeaconDetectedAt == 0L) return "never"
-            return java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.KOREA)
-                .format(java.util.Date(lastBeaconDetectedAt))
-        }
-
-        fun getMinutesSinceLastBeacon(): Long {
-            if (lastBeaconDetectedAt == 0L) return -1L
-            return (System.currentTimeMillis() - lastBeaconDetectedAt) / 60_000L
+        private fun testLog(msg: String) {
+            val time = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.KOREA).format(java.util.Date())
+            Log.d("BLE_SVC", "[$time] $msg")
         }
     }
 
-    // -------------------------------------------------------------------------
+    lateinit var beaconProcessor: BeaconProcessor
+        private set
+
+    val parkingState: ParkingStateManager get() = beaconProcessor.state
+    val beaconTimers: BeaconTimerManager get() = beaconProcessor.timers
+    val beaconProcessorForTimer: BeaconProcessor get() = beaconProcessor
+
     private lateinit var bluetoothAdapter: BluetoothAdapter
     private var leScanner: BluetoothLeScanner? = null
     private var scanCallback: BLEScanCallback? = null
     private var scanPendingIntent: PendingIntent? = null
     private var bluetoothReceiver: BLEBroadcastReceiver? = null
-    private var screenReceiver: ScreenOnReceiver? = null
-    private var notificationDismissReceiver: NotificationDismissReceiver? = null
+    private var screenReceiver: ScreenStateReceiver? = null
+    private var scanWakeLock: PowerManager.WakeLock? = null
 
-    private val scanFilters = mutableListOf<ScanFilter>()
-    private lateinit var scanSettings: ScanSettings
-
-    @Volatile
-    var isStartScanning = false
+    @Volatile private var isScreenOff = false
+    @Volatile var isStartScanning = false
         private set
 
-    // 마지막 스캔 결과 수신 시각 (silent dead 감지용)
-    @Volatile
-    var lastScanResultAt = 0L
-        private set
-
-    // 스캔 시작 시각 (lastScanResultAt=0 상태에서도 dead 판단 가능하게)
-    @Volatile
-    private var scanStartedAt = 0L
-
+    @Volatile var lastScanResultAt = 0L
     private val scanStartTimestamps = ArrayDeque<Long>()
-    private val handler = Handler(Looper.getMainLooper())
-
-    private lateinit var beaconProcessor: BeaconProcessor
-    val parkingState: ParkingStateManager get() = beaconProcessor.state
-    val beaconTimers: BeaconTimerManager get() = beaconProcessor.timers
-    val beaconProcessorForTimer: BeaconProcessor get() = beaconProcessor
-
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val rssiEmaMap = ConcurrentHashMap<String, Double>()
     private val rssiLastSeenMap = ConcurrentHashMap<String, Long>()
 
-    private fun clearRssiEma() {
-        rssiEmaMap.clear()
-        rssiLastSeenMap.clear()
+    // =========================================================================
+    // 외부(BleScanReceiver) 호출 인터페이스
+    // =========================================================================
+
+    fun onPendingIntentResult(result: ScanResult) {
+        lastScanResultAt = System.currentTimeMillis()
+        parseScanResult(result)
+    }
+
+    fun onPendingIntentError(errorCode: Int) {
+        testLog("❌ [PI-Error] $errorCode → 스캔 재시작")
+        resetAndRestartScanning()
     }
 
     // =========================================================================
-    // 강제 갱신 Runnable
-    // 5분마다 leScanner 완전 재생성 (장시간 운영 후 zombie 상태 복구용)
-    // 너무 자주 리셋하면 BT 스택이 2시간 후 사망 → 5분 주기가 적절
+    // 라이프사이클
     // =========================================================================
-    private val scanForceRefreshRunnable = Runnable {
-        if (bluetoothAdapter.isEnabled) {
-            Timber.i("$TAG: 강제 스캔 갱신 (10초 주기) → resetAndRestartScanning")
-            resetAndRestartScanning()
-            // resetAndRestartScanning → startBluetoothScanning → scheduleForceRefresh 재예약됨
-        } else {
-            scheduleForceRefresh()
+
+    private val scanHealthCheckRunnable = object : Runnable {
+        override fun run() {
+            checkScanHealth()
+            mainHandler.postDelayed(this, SCAN_HEALTH_CHECK_INTERVAL_MS)
         }
     }
 
-    private fun scheduleForceRefresh() {
-        handler.removeCallbacks(scanForceRefreshRunnable)
-        handler.postDelayed(scanForceRefreshRunnable, SCAN_FORCE_REFRESH_INTERVAL_MS)
-    }
-
-    // =========================================================================
-    // 헬스 체크 Runnable
-    // 30초마다: isStartScanning=false → 재시작 / silent dead → 재생성 / 정상 → 재예약
-    // =========================================================================
-    private val scanHealthCheckRunnable = Runnable {
+    private fun checkScanHealth() {
         val now = System.currentTimeMillis()
-        val deadSince = if (lastScanResultAt > 0) now - lastScanResultAt else -1L
-        val isSilentDead = isStartScanning && deadSince >= SCAN_DEAD_TIMEOUT_MS
+        val diff = if (lastScanResultAt > 0) now - lastScanResultAt else -1L
+        if (!bluetoothAdapter.isEnabled) return
 
-        when {
-            !isStartScanning -> {
-                Timber.w("$TAG 헬스 체크: 스캔 미실행 → 재시작")
-                if (bluetoothAdapter.isEnabled) startBluetoothScanning()
-            }
-            isSilentDead -> {
-                Timber.w("$TAG 헬스 체크: silent dead 감지 (${deadSince / 1000}초 무응답) → 재생성")
-                resetAndRestartScanning()
-            }
-            else -> {
-                Timber.d(
-                    "$TAG 헬스 체크: 정상 스캔 중 (마지막 결과 ${
-                        if (lastScanResultAt > 0) "${(now - lastScanResultAt) / 1000}초 전" else "아직 없음"
-                    })"
-                )
-                scheduleHealthCheck()
-            }
+        if (isStartScanning && diff >= SCAN_DEAD_TIMEOUT_MS) {
+            testLog("💀 [Health] Silent Dead (90초 무반응) → 복구")
+            resetAndRestartScanning()
+        } else if (!isStartScanning) {
+            startBluetoothScanning()
         }
     }
 
-    // =========================================================================
-    // Service Lifecycle
-    // =========================================================================
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate() {
         super.onCreate()
         runningInstance = this
-        Timber.i("$TAG: onCreate")
-
         bluetoothAdapter = (getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).adapter
         beaconProcessor = BeaconProcessor(applicationContext)
 
-        createNotificationChannel()
+        acquireScanWakeLock() // 서비스 시작 즉시 WakeLock 획득
+        setupReceivers()
+        startForegroundCompat()
+        mainHandler.post(scanHealthCheckRunnable)
+    }
 
-        // 서비스 시작 시 Foreground 알림 설정
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                FOREGROUND_NOTIFICATION_ID,
-                buildNotification(bluetoothAdapter.isEnabled),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE // 매니페스트와 일치시킴
-            )
-        } else {
-            startForeground(
-                FOREGROUND_NOTIFICATION_ID,
-                buildNotification(bluetoothAdapter.isEnabled)
-            )
+    private fun setupReceivers() {
+        bluetoothReceiver = BLEBroadcastReceiver()
+        screenReceiver = ScreenStateReceiver()
+
+        val btFilter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+        val screenFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
         }
 
-        // ✅ 리시버 등록 (Android 14 대응 플래그 추가)
-        // 시스템 브로드캐스트(ACTION_STATE_CHANGED 등)는 기본적으로 시스템이 쏘는 것이지만,
-        // Target SDK 34 이상에서는 명시적인 플래그를 요구합니다.
-
-        bluetoothReceiver = BLEBroadcastReceiver()
-        registerReceiver(
-            bluetoothReceiver,
-            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),
-            RECEIVER_NOT_EXPORTED // 앱 내부용으로 제한 (보안 강화)
-        )
-
-        screenReceiver = ScreenOnReceiver()
-        registerReceiver(
-            screenReceiver,
-            IntentFilter(Intent.ACTION_SCREEN_ON),
-            RECEIVER_NOT_EXPORTED
-        )
-
-        notificationDismissReceiver = NotificationDismissReceiver()
-        registerReceiver(
-            notificationDismissReceiver,
-            IntentFilter(ACTION_NOTIFICATION_DISMISSED),
-            RECEIVER_NOT_EXPORTED
-        )
-
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(bluetoothReceiver, btFilter, RECEIVER_EXPORTED)
+            registerReceiver(screenReceiver, screenFilter, RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(bluetoothReceiver, btFilter)
+            registerReceiver(screenReceiver, screenFilter)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Timber.i("$TAG: onStartCommand isStartScanning=$isStartScanning")
-
-        // 알림이 제거된 경우 즉시 복구 (Android 14+ 에서 foreground 알림이 스와이프로 제거될 수 있음)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                FOREGROUND_NOTIFICATION_ID,
-                buildNotification(bluetoothAdapter.isEnabled),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-            )
-        } else {
-            startForeground(FOREGROUND_NOTIFICATION_ID, buildNotification(bluetoothAdapter.isEnabled))
+        if (scanWakeLock?.isHeld != true) acquireScanWakeLock()
+        if (bluetoothAdapter.isEnabled && !isStartScanning) {
+            startBluetoothScanning()
         }
-
-        if (bluetoothAdapter.isEnabled) {
-            val now = System.currentTimeMillis()
-            val deadSince = if (lastScanResultAt > 0) now - lastScanResultAt else -1L
-            val isSilentDead = isStartScanning && deadSince >= SCAN_DEAD_TIMEOUT_MS
-
-            when {
-                isSilentDead -> {
-                    Timber.w("$TAG: onStartCommand silent dead → 재생성")
-                    resetAndRestartScanning()
-                }
-                isStartScanning -> {
-                    // 스캔이 정상 동작 중이면 건드리지 않음
-                    // (워치독 발화만으로 멀쩡한 스캔을 끊지 않음)
-                    Timber.i("$TAG: 워치독 발화 → 스캔 정상 중, 유지")
-                }
-                else -> {
-                    setupScanComponents()
-                    startBluetoothScanning()
-                }
-            }
-        }
-
         scheduleWatchdog()
-        scheduleDeepWatchdog()
         return START_STICKY
     }
 
-    override fun onTaskRemoved(rootIntent: Intent?) {
-        super.onTaskRemoved(rootIntent)
-        Timber.d("$TAG: onTaskRemoved → 서비스 재시작 예약")
-        scheduleServiceRestart()
-    }
+    // =========================================================================
+    // 스캔 제어
+    // =========================================================================
 
-    override fun onDestroy() {
-        Timber.i("$TAG: onDestroy")
+    private fun startBluetoothScanning() {
+        if (isStartScanning) return
+        val now = System.currentTimeMillis()
 
-        handler.removeCallbacksAndMessages(null)
+        scanStartTimestamps.removeAll { now - it > SCAN_THROTTLE_WINDOW_MS }
+        if (scanStartTimestamps.size >= SCAN_THROTTLE_MAX_COUNT) return
 
-        // PendingIntent 기반 스캔(Android O+)은 OS 레벨에서 유지 → 앱이 죽어도 스캔 계속
-        // 서비스 재시작 후 동일 PendingIntent(FLAG_UPDATE_CURRENT)로 재등록하면 워밍업 없이 이어짐
-        // Callback 기반 스캔(Android O 미만)은 프로세스 종료 시 자동 소멸이므로 명시적 중지
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            try { leScanner?.stopScan(scanCallback) } catch (_: Exception) {}
+        leScanner = bluetoothAdapter.bluetoothLeScanner ?: return
+
+        val settings = ScanSettings.Builder()
+            .setScanMode(if (isScreenOff) ScanSettings.SCAN_MODE_BALANCED else ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+            .build()
+
+        try {
+            if (isScreenOff && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                scanPendingIntent = buildScanPendingIntent()
+                // ✅ 핵심 수정: 빈 필터 → buildScanFilters() 적용
+                // 필터 없는 스캔은 화면 꺼진 상태에서 OS가 즉시 차단함 (API 26+)
+                leScanner?.startScan(buildScanFilters(), settings, scanPendingIntent!!)
+                testLog("▶️ [Start] PendingIntent 모드 (Screen Off, 필터 적용)")
+            } else {
+                scanCallback = BLEScanCallback()
+                // ✅ Callback 모드도 동일하게 필터 적용
+                leScanner?.startScan(buildScanFilters(), settings, scanCallback!!)
+                testLog("▶️ [Start] ScanCallback 모드 (필터 적용)")
+            }
+            isStartScanning = true
+            scanStartTimestamps.addLast(now)
+        } catch (e: Exception) {
+            testLog("❌ [Start] 실패: ${e.message}")
         }
-        // isStartScanning 플래그는 초기화 (새 인스턴스 시작 시 재등록하도록)
-        isStartScanning = false
-        clearRssiEma()
-
-        try { unregisterReceiver(bluetoothReceiver) } catch (_: Exception) {}
-        try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
-        try { unregisterReceiver(notificationDismissReceiver) } catch (_: Exception) {}
-
-        runningInstance = null
-        super.onDestroy()
     }
 
-    override fun onBind(intent: Intent): IBinder? = null
-
-    // =========================================================================
-    // 스캔 구성
-    // =========================================================================
-    private fun setupScanComponents() {
-        scanFilters.clear()
-
-        // iBeacon prefix 필터 (0x02 0x15)
-        scanFilters.add(
+    /**
+     * ✅ Apple iBeacon 제조사 데이터 필터
+     * Android 8.1(API 27)+ 에서 화면 꺼진 상태의 필터 없는 스캔은 OS가 강제 중단함
+     * 제조사 ID(0x4C) + iBeacon subtype(0x02, 0x15) 로 필터링
+     */
+    private fun buildScanFilters(): List<ScanFilter> {
+        return listOf(
             ScanFilter.Builder()
                 .setManufacturerData(
                     BEACON_MANUFACTURER_ID,
@@ -348,515 +201,227 @@ class BluetoothService : Service() {
                 )
                 .build()
         )
-
-        scanSettings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-            .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
-            .setReportDelay(0)
-            .build()
-
-        if (!isStartScanning) {
-            leScanner = bluetoothAdapter.bluetoothLeScanner
-            scanCallback = BLEScanCallback()
-        }
-
-        Timber.i("$TAG: setupScanComponents 완료 filters=${scanFilters.size}")
     }
 
-    // =========================================================================
-    // 스캔 시작 / 중지
-    // =========================================================================
-    fun startBluetoothScanning() {
-        if (isStartScanning) return
-
-        if (leScanner == null || scanCallback == null) {
-            setupScanComponents()
-        }
-        if (leScanner == null) return
-
-        // Throttle 체크
-        val now = System.currentTimeMillis()
-        scanStartTimestamps.removeAll { now - it > SCAN_THROTTLE_WINDOW_MS }
-        if (scanStartTimestamps.size >= SCAN_THROTTLE_MAX_COUNT) {
-            Timber.w("$TAG: BLE scan throttle 방지 - 1초 후 재시도")
-            handler.postDelayed({ startBluetoothScanning() }, 1_000)
-            return
-        }
-
+    private fun stopBluetoothScanning() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // PendingIntent 기반 스캔: 앱이 죽어도 BleScanReceiver가 OS에서 직접 결과 수신
-                val scanIntent = Intent(applicationContext, com.pms_parkin_mobile.receiver.BleScanReceiver::class.java)
-                    .setAction("com.pms_parkin_mobile.BLE_SCAN_RESULT")
-                val piFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-                } else {
-                    PendingIntent.FLAG_UPDATE_CURRENT
-                }
-                scanPendingIntent = PendingIntent.getBroadcast(applicationContext, 0, scanIntent, piFlags)
-                leScanner!!.startScan(scanFilters, scanSettings, scanPendingIntent!!)
-                Timber.i("$TAG: startScan(PendingIntent) 성공")
-            } else {
-                leScanner!!.startScan(scanFilters, scanSettings, scanCallback)
-                Timber.i("$TAG: startScan(Callback) 성공")
+                scanPendingIntent?.let { leScanner?.stopScan(it) }
             }
-
-            isStartScanning = true
-            scanStartedAt = now
-            scanStartTimestamps.addLast(now)
-            scheduleHealthCheck()
-            scheduleForceRefresh()
-
-        } catch (e: Exception) {
-            Timber.e("$TAG: startScan 실패: ${e.message}")
-        }
-    }
-
-    fun stopBluetoothScanning() {
-        handler.removeCallbacks(scanHealthCheckRunnable)
-        handler.removeCallbacks(scanForceRefreshRunnable)
-        if (!isStartScanning) return
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && scanPendingIntent != null) {
-                leScanner?.stopScan(scanPendingIntent)
-            } else {
-                leScanner?.stopScan(scanCallback)
-            }
-            Timber.i("$TAG: stopScan 성공")
-        } catch (e: Exception) {
-            Timber.e("$TAG: stopScan 실패: ${e.message}")
-        } finally {
-            isStartScanning = false
-            scanPendingIntent = null
-            lastScanResultAt = 0L
-            clearRssiEma()
-        }
+            scanCallback?.let { leScanner?.stopScan(it) }
+        } catch (_: Exception) {}
+        scanPendingIntent = null
+        scanCallback = null
+        isStartScanning = false
     }
 
     fun resetAndRestartScanning() {
-        Timber.i("$TAG: leScanner 재생성 시작")
-        handler.removeCallbacks(scanHealthCheckRunnable)
-        handler.removeCallbacks(scanForceRefreshRunnable)
-        try {
-            if (isStartScanning) {
-                try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && scanPendingIntent != null) {
-                        leScanner?.stopScan(scanPendingIntent)
-                    } else {
-                        leScanner?.stopScan(scanCallback)
-                    }
-                } catch (_: Exception) {}
-                isStartScanning = false
-            }
-            leScanner = null
-            scanCallback = null
-            scanPendingIntent = null
-            lastScanResultAt = 0L
-            clearRssiEma()
-
-            if (!bluetoothAdapter.isEnabled) {
-                Timber.w("$TAG: BT 꺼짐 → 재생성 취소")
-                return
-            }
-            leScanner = bluetoothAdapter.bluetoothLeScanner
-            if (leScanner == null) {
-                Timber.e("$TAG: leScanner 획득 실패 → 5초 후 재시도")
-                // 복구 체인이 끊기지 않도록 재시도 + health check 반드시 유지
-                handler.postDelayed({ resetAndRestartScanning() }, 5_000L)
-                scheduleHealthCheck()
-                return
-            }
-            scanCallback = BLEScanCallback()
-
-            handler.postDelayed({ startBluetoothScanning() }, 300)
-            Timber.i("$TAG: leScanner 재생성 완료")
-        } catch (e: Exception) {
-            Timber.e("$TAG: resetAndRestartScanning 실패: ${e.message}")
+        stopBluetoothScanning()
+        // 화면 꺼진 상태에서 postDelayed는 실행 보장 안 됨 → 즉시 재시작
+        if (isScreenOff) {
+            acquireScanWakeLock()
+            startBluetoothScanning()
+        } else {
+            mainHandler.postDelayed({ startBluetoothScanning() }, 500)
         }
     }
 
-    private fun scheduleHealthCheck() {
-        handler.removeCallbacks(scanHealthCheckRunnable)
-        handler.postDelayed(scanHealthCheckRunnable, SCAN_HEALTH_CHECK_INTERVAL_MS)
+    private fun handleScreenState(off: Boolean) {
+        if (isScreenOff == off) return
+        isScreenOff = off
+        testLog("📱 [Screen] ${if (off) "OFF" else "ON"}")
+
+        if (off) acquireScanWakeLock()
+        resetAndRestartScanning()
     }
 
     // =========================================================================
-    // PendingIntent 경로 (BleScanReceiver → 여기로)
+    // 유틸리티
     // =========================================================================
-    fun onPendingIntentResult(result: ScanResult) {
-        lastScanResultAt = System.currentTimeMillis()
-        updateLastBeaconDetectedAt()
-        parseScanResult(result)
+
+    private fun buildScanPendingIntent(): PendingIntent {
+        val intent = Intent(this, com.pms_parkin_mobile.receiver.BleScanReceiver::class.java).apply {
+            action = "com.pms_parkin_mobile.BLE_SCAN_RESULT"
+        }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        return PendingIntent.getBroadcast(this, 7001, intent, flags)
     }
 
-    fun onPendingIntentError(errorCode: Int) {
-        Timber.e("$TAG: PendingIntent 스캔 오류 errorCode=$errorCode → 재생성")
-        isStartScanning = false
-        handler.postDelayed({ resetAndRestartScanning() }, 2_000)
-    }
-
-    // =========================================================================
-    // AlarmManager Watchdog / 서비스 재시작
-    // =========================================================================
     private fun scheduleWatchdog() {
-        val intent = Intent(applicationContext, BluetoothService::class.java)
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, BluetoothService::class.java)
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        else PendingIntent.FLAG_UPDATE_CURRENT
+
         val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            PendingIntent.getForegroundService(applicationContext, 2, intent, flags)
+            PendingIntent.getForegroundService(this, 100, intent, flags)
         } else {
-            PendingIntent.getService(applicationContext, 2, intent, flags)
+            PendingIntent.getService(this, 100, intent, flags)
         }
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
-        val triggerAt = SystemClock.elapsedRealtime() + 60_000L
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-            alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+
+        val triggerAt = SystemClock.elapsedRealtime() + 45_000L
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
         } else {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+            am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
         }
     }
 
-    // 딥 워치독: 10분 간격, 60초 워치독 체인이 끊겨도 복구
-    // requestCode=3 으로 scheduleWatchdog(requestCode=2)와 충돌 없음
-    private fun scheduleDeepWatchdog() {
-        val intent = Intent(applicationContext, BluetoothService::class.java)
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-        val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            PendingIntent.getForegroundService(applicationContext, 3, intent, flags)
-        } else {
-            PendingIntent.getService(applicationContext, 3, intent, flags)
+    private fun startForegroundCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val chan = NotificationChannel(CHANNEL_ID, "BLE Service", NotificationManager.IMPORTANCE_LOW)
+            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(chan)
         }
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
-        val triggerAt = SystemClock.elapsedRealtime() + 10 * 60_000L
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-            alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("스마트파킹")
+            .setContentText("백그라운드 스캔 실행 중")
+            .setSmallIcon(R.drawable.logo)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(FOREGROUND_NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         } else {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+            startForeground(FOREGROUND_NOTIFICATION_ID, notification)
         }
-        Timber.d("$TAG: 딥 워치독 예약 (10분 후)")
     }
 
-    private fun reRegisterPendingIntentScan() {
-        if (!bluetoothAdapter.isEnabled) return
-        if (leScanner == null) leScanner = bluetoothAdapter.bluetoothLeScanner
-        val scanner = leScanner ?: return
-        if (scanFilters.isEmpty()) setupScanComponents()
+    private fun acquireScanWakeLock() {
+        if (scanWakeLock?.isHeld == true) return
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        scanWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pms:ble_scan_lock")
+            .apply { acquire() } // 타임아웃 없이 무기한
+        testLog("🔒 [WakeLock] 획득")
+    }
 
-        // API 26 이상만 PendingIntent 스캔 가능
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            Timber.w("$TAG: API 26 미만 → PendingIntent 스캔 불가 → Callback 방식으로 대체")
-            if (!isStartScanning) startBluetoothScanning()
+    private fun releaseScanWakeLock() {
+        if (scanWakeLock?.isHeld == true) scanWakeLock?.release()
+        testLog("🔓 [WakeLock] 해제")
+    }
+
+    // =========================================================================
+    // 데이터 처리
+    // =========================================================================
+
+    private fun parseScanResult(result: ScanResult) {
+        lastScanResultAt = System.currentTimeMillis()
+        val scanRecord = result.scanRecord ?: return
+        val rssi = result.rssi
+        val allManufacturerData = scanRecord.manufacturerSpecificData
+        Log.d("BLE_DEBUG", "제조사 데이터 개수: ${allManufacturerData?.size()}, RSSI: $rssi")
+        for (i in 0 until (allManufacturerData?.size() ?: 0)) {
+            val key = allManufacturerData!!.keyAt(i)
+            val value = allManufacturerData.valueAt(i)
+            Log.d("BLE_DEBUG", "  키: 0x${key.toString(16).uppercase()}, 값: ${value.joinToString("") { "%02X".format(it) }}")
+        }
+        val bytes = scanRecord.getManufacturerSpecificData(BEACON_MANUFACTURER_ID) ?: return
+
+        if (bytes.size < 23 || (bytes[0].toInt() and 0xFF) != BEACON_SUBTYPE) {
+            Log.w(TAG, "⚠️ [Unknown Beacon] iBeacon 형식이 아님 (Size: ${bytes.size})")
             return
         }
 
-        try {
-            val scanIntent = Intent(applicationContext, com.pms_parkin_mobile.receiver.BleScanReceiver::class.java)
-                .setAction("com.pms_parkin_mobile.BLE_SCAN_RESULT")
-            val piFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-            } else {
-                PendingIntent.FLAG_UPDATE_CURRENT
-            }
-            val pi = PendingIntent.getBroadcast(applicationContext, 0, scanIntent, piFlags)
-            scanner.startScan(scanFilters, scanSettings, pi)
-            scanPendingIntent = pi
-            Timber.i("$TAG: PendingIntent 재등록 성공")
-        } catch (e: Exception) {
-            Timber.e("$TAG: PendingIntent 재등록 실패 → 전체 재생성: ${e.message}")
-            handler.post { resetAndRestartScanning() }
-        }
+        val uuidRaw = bytesToHex(bytes, 2, 16)
+        val normalizedTargetUuid = UUID_DONGTAN.replace("-", "").lowercase()
+        Log.d("TEST", "수신 UUID: $uuidRaw")
+        Log.d("TEST", "타겟 UUID: $normalizedTargetUuid")
+        Log.d("TEST", "매칭 여부: ${uuidRaw.contains(normalizedTargetUuid)}")
+        if (!uuidRaw.contains(normalizedTargetUuid)) return
+
+        val major = bytesToHex(bytes, 18, 2).toInt(16)
+        val minor = bytesToHex(bytes, 20, 2).toInt(16)
+
+        Log.i(TAG, "✅ [Match] Major: $major, Minor: $minor, RSSI: $rssi")
+        processBeacon(major, minor, rssi.toDouble())
     }
 
-    fun scheduleServiceRestart() {
-        val intent = Intent(applicationContext, BluetoothService::class.java)
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-        val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            PendingIntent.getForegroundService(applicationContext, 1, intent, flags)
-        } else {
-            PendingIntent.getService(applicationContext, 1, intent, flags)
-        }
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
-        val triggerAt = SystemClock.elapsedRealtime() + 300L
-        // setExactAndAllowWhileIdle: Doze 상태에서도 정확한 시간에 서비스 재시작
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-            alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
-        } else {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
-        }
-    }
-
-    // =========================================================================
-    // 비콘 파싱 및 처리
-    // =========================================================================
-    private fun parseScanResult(result: ScanResult) {
-        val rssi = result.rssi.toDouble()
-        if (rssi == 127.0) return
-
-        val scanRecord: ScanRecord = result.scanRecord ?: return
-        val bytes = scanRecord.getManufacturerSpecificData(BEACON_MANUFACTURER_ID) ?: return
-        if (bytes.size < 23) return
-
-        if ((bytes[0].toInt() and 0xFF) != BEACON_SUBTYPE ||
-            (bytes[1].toInt() and 0xFF) != BEACON_SUBTYPE_LENGTH) return
-
-        // UUID 파싱 시 하이픈 형식으로 조합
-        val uuidRaw = bytesToHex(bytes, 2, 16, upper = false)
-        val uuid = "${uuidRaw.substring(0,8)}-${uuidRaw.substring(8,12)}-${uuidRaw.substring(12,16)}-${uuidRaw.substring(16,20)}-${uuidRaw.substring(20)}"
-
-        if (uuid != UUID_DONGTAN) return
-
-        val major = bytesToHex(bytes, 18, 2, upper = true).toInt(16)
-        val minor = bytesToHex(bytes, 20, 2, upper = true).toInt(16)
-
-        onBeaconDetected(uuid, major, minor, rssi)
-    }
-
-    private fun onBeaconDetected(uuid: String, major: Int, minor: Int, rssi: Double) {
-        val app = App.instance
-        val emaKey = when (major) {
-            1, 4, 5 -> "$major-$minor"
-            else -> "$major"
-        }
-
-        // 1. RSSI 보정 (EMA 필터 적용)
+    private fun processBeacon(major: Int, minor: Int, rssi: Double) {
+        val emaKey = if (major == 1 || major >= 4) "$major-$minor" else "$major"
         val smoothedRssi = smoothRssi(emaKey, rssi)
-        Timber.v("$TAG EMA key=$emaKey raw=${"%.1f".format(rssi)} smoothed=${"%.1f".format(smoothedRssi)}")
 
-        // 2. 신호 세기 컷오프 (-90dBm 이하는 무시)
         if (smoothedRssi < -90) {
+            Log.d(TAG, "📉 [LowSignal] Major: $major, Minor: $minor, RSSI: ${"%.1f".format(smoothedRssi)}")
             if (major == 4) beaconProcessor.keepParkingServiceAlive()
             return
         }
 
-
-        // 4. 자동 주차 로직 (isPassiveCheck 가 false 일 때만 실행)
         when (major) {
-            1 -> BeaconFunction().OnlyOpenLobby(minor, smoothedRssi)
+            1 -> {
+                Log.i(TAG, "🏢 [Lobby] 로비 감지 (Minor: $minor, SmoothRSSI: ${"%.1f".format(smoothedRssi)})")
+                BeaconFunction.getInstance().OnlyOpenLobby(minor, smoothedRssi)
+            }
             4 -> {
-                if (app.isPassiveCheck) {
-                    handlePassiveParkingData(major, minor, smoothedRssi)
-                    return // 수동 주차 데이터 수집 시 자동 로직은 타지 않음
-                }
-
-                Timber.i("$TAG: 4번비컨 주차시작 비컨 주입확인")
+                Log.i(TAG, "🚗 [Stay] 주차면 감지 (Minor: $minor, SmoothRSSI: ${"%.1f".format(smoothedRssi)})")
                 beaconProcessor.processStayParking(minor, smoothedRssi)
             }
             5 -> {
-                Timber.i("$TAG: 5번비컨 주차구역 변경 비컨 주입확인")
+                Log.i(TAG, "🔄 [Change] 주차면 변화 감지 (Major: 5, Minor: $minor)")
                 beaconProcessor.processChangeParking(major, minor, smoothedRssi)
             }
+            else -> Log.d(TAG, "❓ [Other] 정의되지 않은 Major: $major")
         }
     }
 
-    // =========================================================================
-    // UUID / Hex 유틸
-    // =========================================================================
-    private fun bytesToHex(bytes: ByteArray, offset: Int, length: Int, upper: Boolean): String {
-        val sb = StringBuilder()
-        for (i in offset until offset + length) {
-            sb.append(
-                if (upper) "%02X".format(bytes[i].toInt() and 0xFF)
-                else "%02x".format(bytes[i].toInt() and 0xFF)
-            )
-        }
-        return sb.toString()
-    }
-
-    // =========================================================================
-    // RSSI EMA 필터
-    // =========================================================================
     private fun smoothRssi(key: String, rawRssi: Double): Double {
         val now = System.currentTimeMillis()
-        val prev = rssiEmaMap[key]
-        val lastSeen = rssiLastSeenMap[key]
+        val prev = rssiEmaMap[key] ?: rawRssi
+        val lastSeen = rssiLastSeenMap[key] ?: 0L
 
-        val isReset = prev == null || lastSeen == null || (now - lastSeen) > RSSI_EMA_TIMEOUT_MS
-        val smoothed = if (isReset) {
-            if (lastSeen != null) Timber.d("$TAG EMA reset key=$key (gap=${now - lastSeen}ms)")
-            rawRssi
-        } else {
-            RSSI_EMA_ALPHA * rawRssi + (1.0 - RSSI_EMA_ALPHA) * prev
-        }
+        val smoothed = if (now - lastSeen > RSSI_EMA_TIMEOUT_MS) rawRssi
+        else RSSI_EMA_ALPHA * rawRssi + (1.0 - RSSI_EMA_ALPHA) * prev
 
         rssiEmaMap[key] = smoothed
         rssiLastSeenMap[key] = now
         return smoothed
     }
 
-    // =========================================================================
-    // Foreground 알림
-    // =========================================================================
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID, "BLE 스캔 서비스", NotificationManager.IMPORTANCE_LOW
-            )
-            (getSystemService(NOTIFICATION_SERVICE) as? NotificationManager)
-                ?.createNotificationChannel(channel)
-        }
-    }
-
-    private fun buildNotification(isBluetoothOn: Boolean): Notification {
-        val text = if (isBluetoothOn) "비콘 스캔 중입니다." else "블루투스가 꺼져 있습니다."
-        val dismissIntent = Intent(ACTION_NOTIFICATION_DISMISSED).setPackage(packageName)
-        val dismissPiFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
-        val dismissPi = PendingIntent.getBroadcast(this, 99, dismissIntent, dismissPiFlags)
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("스마트파킹")
-            .setContentText(text)
-            .setSmallIcon(R.drawable.logo)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setDeleteIntent(dismissPi)
-            .build()
-    }
-
-    private fun updateNotification(isBluetoothOn: Boolean) {
-        (getSystemService(NOTIFICATION_SERVICE) as? NotificationManager)
-            ?.notify(FOREGROUND_NOTIFICATION_ID, buildNotification(isBluetoothOn))
+    private fun bytesToHex(bytes: ByteArray, offset: Int, length: Int): String {
+        return bytes.sliceArray(offset until offset + length).joinToString("") { "%02x".format(it) }
     }
 
     // =========================================================================
-    // Inner Class: BLEScanCallback (Android < O 용)
+    // 내부 클래스
     // =========================================================================
+
     private inner class BLEScanCallback : ScanCallback() {
-        override fun onScanResult(callbackType: Int, result: ScanResult) {
-            super.onScanResult(callbackType, result)
-            lastScanResultAt = System.currentTimeMillis()
-            updateLastBeaconDetectedAt()
-            parseScanResult(result)
-        }
+        override fun onScanResult(callbackType: Int, result: ScanResult) = parseScanResult(result)
+        override fun onBatchScanResults(results: List<ScanResult>) = results.forEach { parseScanResult(it) }
+    }
 
-        override fun onBatchScanResults(results: List<ScanResult>) {
-            super.onBatchScanResults(results)
-            if (results.isNotEmpty()) {
-                lastScanResultAt = System.currentTimeMillis()
-                updateLastBeaconDetectedAt()
-            }
-            results.forEach { parseScanResult(it) }
-        }
-
-        override fun onScanFailed(errorCode: Int) {
-            super.onScanFailed(errorCode)
-            Timber.e("$TAG: onScanFailed errorCode=$errorCode")
-            isStartScanning = false
-
-            when (errorCode) {
-                SCAN_FAILED_ALREADY_STARTED -> {
-                    isStartScanning = true
-                    scheduleHealthCheck()
-                    Timber.w("$TAG: 이미 스캔 중 (ALREADY_STARTED) → 무시")
-                }
-                SCAN_FAILED_INTERNAL_ERROR, SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> {
-                    Timber.w("$TAG: leScanner 오류 (code=$errorCode) → 재생성 후 재시도")
-                    handler.postDelayed({ resetAndRestartScanning() }, 5_000L)
-                }
-                else -> {
-                    Timber.w("$TAG: scan 오류 (code=$errorCode) → 3초 후 재시도")
-                    handler.postDelayed({
-                        if (!isStartScanning) startBluetoothScanning()
-                    }, 3_000L)
-                }
+    private inner class ScreenStateReceiver : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> handleScreenState(true)
+                Intent.ACTION_SCREEN_ON -> handleScreenState(false)
             }
         }
     }
 
-    // =========================================================================
-    // Inner Class: BLEBroadcastReceiver (Bluetooth On/Off 감지)
-    // =========================================================================
     private inner class BLEBroadcastReceiver : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
-            when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
-                BluetoothAdapter.STATE_ON -> {
-                    Timber.d("$TAG: Bluetooth On → 스캔 재시작")
-                    updateNotification(true)
-                    setupScanComponents()
-                    startBluetoothScanning()
-                }
-                BluetoothAdapter.STATE_OFF -> {
-                    Timber.d("$TAG: Bluetooth Off → 스캔 중지")
-                    updateNotification(false)
-                    try {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && scanPendingIntent != null) {
-                            leScanner?.stopScan(scanPendingIntent)
-                        } else {
-                            leScanner?.stopScan(scanCallback)
-                        }
-                    } catch (_: Exception) {}
-                    leScanner = null
-                    scanCallback = null
-                    scanPendingIntent = null
-                    isStartScanning = false
-                    lastScanResultAt = 0L
-                }
+            if (intent.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)
+                if (state == BluetoothAdapter.STATE_ON) resetAndRestartScanning()
+                else if (state == BluetoothAdapter.STATE_OFF) stopBluetoothScanning()
             }
         }
     }
 
-    // =========================================================================
-    // Inner Class: ScreenOnReceiver (화면 켜짐 시 스캔 복구)
-    // =========================================================================
-    private inner class ScreenOnReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != Intent.ACTION_SCREEN_ON) return
-            Timber.d("$TAG: 화면 켜짐 → 스캔 상태 확인")
-            if (!isStartScanning && bluetoothAdapter.isEnabled) {
-                Timber.w("$TAG: 화면 켜짐 후 스캔 미실행 → 재생성 후 재시작")
-                resetAndRestartScanning()
-            }
-        }
+    override fun onDestroy() {
+        mainHandler.removeCallbacksAndMessages(null)
+        stopBluetoothScanning()
+        releaseScanWakeLock()
+        try {
+            unregisterReceiver(bluetoothReceiver)
+            unregisterReceiver(screenReceiver)
+        } catch (_: Exception) {}
+        runningInstance = null
+        super.onDestroy()
     }
 
-    // =========================================================================
-    // Inner Class: NotificationDismissReceiver (알림 제거 시 즉시 복구)
-    // =========================================================================
-    private inner class NotificationDismissReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != ACTION_NOTIFICATION_DISMISSED) return
-            Timber.w("$TAG: 알림이 제거됨 → 알림 즉시 복구")
-            startForeground(FOREGROUND_NOTIFICATION_ID, buildNotification(bluetoothAdapter.isEnabled))
-            if (!isStartScanning && bluetoothAdapter.isEnabled) {
-                Timber.w("$TAG: 알림 복구 시 스캔 미실행 감지 → 재시작")
-                startBluetoothScanning()
-            }
-        }
-    }
-    private fun handlePassiveParkingData(major: Int, minor: Int, rssi: Double) {
-        val app = App.instance
-        // minor가 32768보다 큰 경우(비표준 처리) 대응
-        val normalizedId = if (minor > 32768) minor - 32768 else minor
-        val hexId = "%04X".format(normalizedId).uppercase() // 대문자 통일
-        val currentDelay = app.mWholeTimerDelay
-
-        synchronized(app.mAccelBeaconMap) {
-            // 1. 해당 ID의 비컨 객체가 없으면 새로 생성하여 Map에 주입
-            val accelBeacon = app.mAccelBeaconMap.getOrPut(hexId) {
-                com.pms_parkin_mobile.dto.AccelBeacon().apply {
-                    this.beaconId = hexId
-                    this.minor = minor.toString()
-                    // 중복 데이터 수집을 위해 ArrayList(MutableList) 계열 권장
-                    this.delayList = ArrayList<String>()
-                }
-            }
-
-            // 2. RSSI_Delay 기록 (중복 허용)
-            val record = "${rssi.toInt()}_$currentDelay"
-
-            // delayList의 타입이 기존에 LinkedHashSet으로 강제되어 있다면
-            // DTO 클래스 자체의 타입을 MutableList<String>으로 바꾸는 것이 가장 좋습니다.
-            (accelBeacon.delayList as? MutableCollection<String>)?.add(record)
-
-            Log.d("Passive", "📍 [데이터 수집] ID: $hexId | 기록: $record | 총 개수: ${accelBeacon.delayList?.size}")
-        }
-    }
-
+    override fun onBind(intent: Intent): IBinder? = null
 }

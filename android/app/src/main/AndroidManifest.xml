@@ -2,113 +2,109 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.INTERNET" />
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- ✅ 위치 FGS 타입 (targetSdk 34+ 필수) -->
+    <!-- BLE 스캔은 LOCATION 타입 사용 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- ✅ 삭제: CONNECTED_DEVICE 권한 제거
+         이 권한이 남아있으면 삼성 MCFServer가 서비스를 CONNECTED_DEVICE 타입으로
+         인식하여 화면 꺼질 때 BLE 콜백을 강제 제거함 -->
+    <!-- <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" /> -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
-    <!-- 위치 런타임 권한: COARSE로도 OK (정밀 필요하면 FINE도 추가) -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <!-- 알림(안드 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- 부팅 완료 시 서비스 자동 재시작 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-        <application
-      android:name=".MainApplication"
-      android:label="@string/app_name"
-      android:icon="@mipmap/ic_launcher"
-      android:networkSecurityConfig="@xml/network_security_config"
-      android:roundIcon="@mipmap/ic_launcher_round"
-      android:allowBackup="false"
-      android:theme="@style/AppTheme"
-      android:usesCleartextTraffic="${usesCleartextTraffic}"
-      android:supportsRtl="true">
-      <activity
-        android:name=".MainActivity"
+    <application
+        android:name=".MainApplication"
         android:label="@string/app_name"
-        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
-        android:launchMode="singleTask"
-        android:windowSoftInputMode="adjustResize"
-        android:exported="true">
-        <intent-filter>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
-        </intent-filter>
-      </activity>
+        android:icon="@mipmap/ic_launcher"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:allowBackup="false"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="${usesCleartextTraffic}"
+        android:supportsRtl="true">
 
-            <service
-                android:name="com.pms_parkin_mobile.service.BluetoothService"
-                android:enabled="true"
-                android:exported="true"
-                android:stopWithTask="false"
-                android:foregroundServiceType="connectedDevice"
-                tools:ignore="Instantiatable" />
-            <service
-                android:name="com.pms_parkin_mobile.service.SensorService"
-                android:enabled="true"
-                android:exported="true"
-                android:stopWithTask="false"
-                android:foregroundServiceType="location"
-                tools:ignore="Instantiatable" />
+        <activity
+            android:name=".MainActivity"
+            android:label="@string/app_name"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
+        <!-- ✅ foregroundServiceType="location" 유지 -->
+        <service
+            android:name="com.pms_parkin_mobile.service.BluetoothService"
+            android:enabled="true"
+            android:exported="true"
+            android:stopWithTask="false"
+            android:foregroundServiceType="location"
+            tools:ignore="Instantiatable" />
+
+        <service
+            android:name="com.pms_parkin_mobile.service.SensorService"
+            android:enabled="true"
+            android:exported="true"
+            android:stopWithTask="false"
+            android:foregroundServiceType="location"
+            tools:ignore="Instantiatable" />
 
         <service
             android:name="com.pms_parkin_mobile.module.UserIntent"
             android:exported="true" />
 
-            <service android:name=".foreground.ParkingSuccessAlarm"
-                android:enabled="true"
-                android:exported="true"
-                >
-            </service>
+        <service
+            android:name=".foreground.ParkingSuccessAlarm"
+            android:enabled="true"
+            android:exported="true" />
 
-            <service android:name=".foreground.OpenLobbyAlarm"
-                android:enabled="true"
-                android:exported="true"
-                android:foregroundServiceType="dataSync">
-            </service>
+        <service
+            android:name=".foreground.OpenLobbyAlarm"
+            android:enabled="true"
+            android:exported="true"
+            android:foregroundServiceType="dataSync" />
 
-            <receiver
-                android:name="com.pms_parkin_mobile.receiver.NotificationActionReceiver"
-                android:enabled="true"
-                android:exported="false">
-                <intent-filter>
-                    <action android:name="com.pms_parkin_mobile.NOTIFICATION_DISMISSED" />
-                </intent-filter>
-            </receiver>
+        <receiver
+            android:name="com.pms_parkin_mobile.receiver.NotificationActionReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.pms_parkin_mobile.NOTIFICATION_DISMISSED" />
+            </intent-filter>
+        </receiver>
 
-            <!-- PendingIntent 기반 BLE 스캔 결과 수신 — 백그라운드에서도 OS가 직접 전달 -->
-            <receiver
-                android:name="com.pms_parkin_mobile.receiver.BleScanReceiver"
-                android:enabled="true"
-                android:exported="false">
-                <intent-filter>
-                    <action android:name="com.pms_parkin_mobile.BLE_SCAN_RESULT" />
-                </intent-filter>
-            </receiver>
+        <receiver
+            android:name="com.pms_parkin_mobile.receiver.BleScanReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <!-- PendingIntent BLE 스캔 결과 -->
+                <action android:name="com.pms_parkin_mobile.BLE_SCAN_RESULT" />
+                <!-- 8분 주기 서비스 감시 알람 -->
+                <action android:name="com.pms_parkin_mobile.BLUETOOTH_ALARM" />
+                <!-- 부팅 완료 -->
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
-            <!-- 부팅/재시작 시 BleScanner 자동 재시작 -->
-            <receiver
-                android:name="com.pms_parkin_mobile.receiver.BootReceiver"
-                android:enabled="true"
-                android:exported="true">
-                <intent-filter>
-                    <action android:name="android.intent.action.BOOT_COMPLETED" />
-                    <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-                    <category android:name="android.intent.category.DEFAULT" />
-                </intent-filter>
-            </receiver>
+        <!-- BootReceiver 역할을 BleScanReceiver로 통합 -->
+        <!-- <receiver android:name="com.pms_parkin_mobile.receiver.BootReceiver" ... /> -->
+
     </application>
-
-
 
 </manifest>
