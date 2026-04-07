@@ -45,5 +45,5 @@ class AccelBeacon {
     // 타입을 String으로 변환 수정 JHLEE 2025.1.10
     @SerializedName("DelayList")
     @Expose
-    var delayList: LinkedHashSet<String?>? = null // 타입을 String으로 변환 수정끝 JHLEE 2025.1.10
+    var delayList: MutableList<String> = ArrayList()
 }

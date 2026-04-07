@@ -172,19 +172,19 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
 
             val ctx: Context = reactApplicationContext
             // 💡 이제 결과값은 AccelBeacon 객체가 아니라 String(비컨 ID)입니다.
-            val finalBeaconId = PassiveParkingService.getInstance(ctx).parkingEnd()
+            val result = PassiveParkingService.getInstance(ctx).parkingEnd()
 
-            if (finalBeaconId == null) {
+            if (result == null) {
                 promise.resolve(null)
                 return
             }
 
-            // JS로 전달할 맵 구성
             val map = Arguments.createMap().apply {
-                // finalBeaconId 자체가 ID이므로 그대로 넣습니다.
-                putString("beaconId", finalBeaconId)
-                // 삼각측량 결과에서는 단일 RSSI 의미가 없으므로 0이나 적당한 값을 넣거나 제외합니다.
-                putInt("rssi", 0)
+                putString("beaconId", result.beaconId)
+                putDouble("x", result.x)           // 가중치 추정 좌표
+                putDouble("y", result.y)
+                putDouble("beaconX", result.beaconX) // 매칭된 비컨 좌표
+                putDouble("beaconY", result.beaconY)
             }
 
             Log.d("Passive" ,"수동주차위치 결과 map : $map")

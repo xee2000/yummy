@@ -42,9 +42,9 @@ class BluetoothService : Service() {
         private const val CHANNEL_ID = "ble_scan_channel"
         const val FOREGROUND_NOTIFICATION_ID = 821
 
-//        const val UUID_DONGTAN = "20151005-8864-5654-4159-013500201901"
+        const val UUID_DONGTAN = "20151005-8864-5654-4159-013500201901"
         const val UUID_BANSEOK = "20151005-8864-5654-3020-013900202001"
-//        const val UUID_PRIMO = "20151005-8864-5654-4623-010400240401"
+        const val UUID_PRIMO = "20151005-8864-5654-4623-010400240401"
 
         private const val BLE_DOORPHONE_SERVICE_UUID = "0000f1ae-0000-1000-8000-00805f9b34fb"
 
@@ -62,7 +62,7 @@ class BluetoothService : Service() {
         // 60초 동안 결과 없으면 silent dead 판단
         private const val SCAN_DEAD_TIMEOUT_MS = 60_000L
 
-        // 5분마다 강제 스캔 갱신 (lastScanResultAt=0 상태에서 silent dead 장기 방치 방지)
+        // 5분마다 강제 스캔 갱신 (너무 자주 리셋하면 BT 스택 zombie화 → 2시간 후 사망)
         private const val SCAN_FORCE_REFRESH_INTERVAL_MS = 5 * 60_000L
 
         private const val RSSI_EMA_ALPHA = 0.3
@@ -136,6 +136,10 @@ class BluetoothService : Service() {
     var lastScanResultAt = 0L
         private set
 
+    // 스캔 시작 시각 (lastScanResultAt=0 상태에서도 dead 판단 가능하게)
+    @Volatile
+    private var scanStartedAt = 0L
+
     private val scanStartTimestamps = ArrayDeque<Long>()
     private val handler = Handler(Looper.getMainLooper())
 
@@ -154,19 +158,17 @@ class BluetoothService : Service() {
 
     // =========================================================================
     // 강제 갱신 Runnable
-    // 5분마다 무조건 스캔 재등록
-    // lastScanResultAt=0 고착 상태(비컨 없는 환경에서 silent dead 방치)를 방지
+    // 5분마다 leScanner 완전 재생성 (장시간 운영 후 zombie 상태 복구용)
+    // 너무 자주 리셋하면 BT 스택이 2시간 후 사망 → 5분 주기가 적절
     // =========================================================================
     private val scanForceRefreshRunnable = Runnable {
-        if (isStartScanning && bluetoothAdapter.isEnabled) {
-            Timber.i("$TAG: 강제 스캔 갱신 (30분 주기) → reRegisterPendingIntentScan")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                reRegisterPendingIntentScan()
-            } else {
-                resetAndRestartScanning()
-            }
+        if (bluetoothAdapter.isEnabled) {
+            Timber.i("$TAG: 강제 스캔 갱신 (10초 주기) → resetAndRestartScanning")
+            resetAndRestartScanning()
+            // resetAndRestartScanning → startBluetoothScanning → scheduleForceRefresh 재예약됨
+        } else {
+            scheduleForceRefresh()
         }
-        scheduleForceRefresh()
     }
 
     private fun scheduleForceRefresh() {
@@ -283,12 +285,9 @@ class BluetoothService : Service() {
                     resetAndRestartScanning()
                 }
                 isStartScanning -> {
-                    // 이미 스캔 중이어도 PendingIntent 재등록
-                    // OS가 장시간 Doze 후 스캔을 취소했을 수 있으므로 항상 재등록으로 복구
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        reRegisterPendingIntentScan()
-                    }
-                    Timber.i("$TAG: 스캔 중 → PendingIntent 재등록")
+                    // 스캔이 정상 동작 중이면 건드리지 않음
+                    // (워치독 발화만으로 멀쩡한 스캔을 끊지 않음)
+                    Timber.i("$TAG: 워치독 발화 → 스캔 정상 중, 유지")
                 }
                 else -> {
                     setupScanComponents()
@@ -404,6 +403,7 @@ class BluetoothService : Service() {
             }
 
             isStartScanning = true
+            scanStartedAt = now
             scanStartTimestamps.addLast(now)
             scheduleHealthCheck()
             scheduleForceRefresh()
@@ -462,7 +462,10 @@ class BluetoothService : Service() {
             }
             leScanner = bluetoothAdapter.bluetoothLeScanner
             if (leScanner == null) {
-                Timber.e("$TAG: leScanner 획득 실패")
+                Timber.e("$TAG: leScanner 획득 실패 → 5초 후 재시도")
+                // 복구 체인이 끊기지 않도록 재시도 + health check 반드시 유지
+                handler.postDelayed({ resetAndRestartScanning() }, 5_000L)
+                scheduleHealthCheck()
                 return
             }
             scanCallback = BLEScanCallback()
@@ -604,7 +607,7 @@ class BluetoothService : Service() {
         val uuidRaw = bytesToHex(bytes, 2, 16, upper = false)
         val uuid = "${uuidRaw.substring(0,8)}-${uuidRaw.substring(8,12)}-${uuidRaw.substring(12,16)}-${uuidRaw.substring(16,20)}-${uuidRaw.substring(20)}"
 
-        if (uuid != UUID_BANSEOK) return
+        if (uuid != UUID_DONGTAN) return
 
         val major = bytesToHex(bytes, 18, 2, upper = true).toInt(16)
         val minor = bytesToHex(bytes, 20, 2, upper = true).toInt(16)
@@ -829,24 +832,30 @@ class BluetoothService : Service() {
     }
     private fun handlePassiveParkingData(major: Int, minor: Int, rssi: Double) {
         val app = App.instance
-        val id = if (minor > 32768) minor - 32768 else minor
-        val hexId = "%04X".format(id)
+        // minor가 32768보다 큰 경우(비표준 처리) 대응
+        val normalizedId = if (minor > 32768) minor - 32768 else minor
+        val hexId = "%04X".format(normalizedId).uppercase() // 대문자 통일
         val currentDelay = app.mWholeTimerDelay
 
         synchronized(app.mAccelBeaconMap) {
+            // 1. 해당 ID의 비컨 객체가 없으면 새로 생성하여 Map에 주입
             val accelBeacon = app.mAccelBeaconMap.getOrPut(hexId) {
                 com.pms_parkin_mobile.dto.AccelBeacon().apply {
                     this.beaconId = hexId
                     this.minor = minor.toString()
-                    this.delayList = LinkedHashSet<String?>() as LinkedHashSet<String?>?
+                    // 중복 데이터 수집을 위해 ArrayList(MutableList) 계열 권장
+                    this.delayList = ArrayList<String>()
                 }
             }
 
-            // "RSSI_Delay" 형식으로 기록 저장
+            // 2. RSSI_Delay 기록 (중복 허용)
             val record = "${rssi.toInt()}_$currentDelay"
-            accelBeacon.delayList?.add(record)
 
-            Log.d("Passive", "📍 [수동주차 수집] $hexId -> $record (현재 수집량: ${accelBeacon.delayList?.size})")
+            // delayList의 타입이 기존에 LinkedHashSet으로 강제되어 있다면
+            // DTO 클래스 자체의 타입을 MutableList<String>으로 바꾸는 것이 가장 좋습니다.
+            (accelBeacon.delayList as? MutableCollection<String>)?.add(record)
+
+            Log.d("Passive", "📍 [데이터 수집] ID: $hexId | 기록: $record | 총 개수: ${accelBeacon.delayList?.size}")
         }
     }
 

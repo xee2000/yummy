@@ -1,14 +1,14 @@
 package com.pms_parkin_mobile.service
 
-import android.util.Log
-import com.pms_parkin_mobile.api.RestController
-import com.pms_parkin_mobile.dto.LobbyOpenData
-import android.content.Context
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Context
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.pms_parkin_mobile.R
+import com.pms_parkin_mobile.api.RestController
+import com.pms_parkin_mobile.dto.LobbyOpenData
 
 class BeaconFunction {
 
@@ -71,15 +71,19 @@ class BeaconFunction {
             RestController.instance.openLobbyDataNull(userId)
             return
         }
-
+        val minorHex = java.lang.String.format("%04X", minor) // 현재 스캔된 Minor (Hex)
         RestController.instance.openLobbyinit(userId)
 
         for (data in lobbyOpenData) {
             val lobbyMinor = data.minor
             val targetRssi = data.rssi?.toDoubleOrNull() ?: -100.0
 
+            RestController.instance.openLobbyinit("스캔중인 minor : " + minorHex)
+            RestController.instance.openLobbyinit("갖고있는 lobbyMinor : " + lobbyMinor)
+
+
             // RSSI 조건 충족 시
-            if (rssi >= targetRssi) {
+            if (rssi >= targetRssi && lobbyMinor == minorHex) {
                 // 1. 서버에 문열림 요청
                 val newdata = LobbyOpenData().apply {
                     this.minor = lobbyMinor
