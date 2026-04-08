@@ -252,7 +252,19 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
 
             paa?.requestPermissions(perms, PermissionManager.REQUEST_CODE_ALL, object : PermissionListener {
                 override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray): Boolean {
-                    if (!PermissionManager.hasAllPermissions(ctx)) {
+                    // 전경 위치 등 기본 권한 확인 (백그라운드 위치 제외)
+                    val hasForegroundPerms = PermissionManager.hasLocationPermissions(ctx)
+                            && PermissionManager.hasPostNotifications(ctx)
+                            && PermissionManager.hasNearbyScan(ctx)
+                            && PermissionManager.hasNearbyConnect(ctx)
+                    if (!hasForegroundPerms) {
+                        promise.resolve(false)
+                        return true
+                    }
+                    // 백그라운드 위치(항상 허용) 별도 요청
+                    if (!PermissionManager.hasBackgroundLocation(ctx)) {
+                        Log.d("AndroidModule", "백그라운드 위치 권한 필요 → '항상 허용' 유도")
+                        PermissionManager.requestBackgroundLocation(a)
                         promise.resolve(false)
                         return true
                     }
@@ -272,6 +284,14 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
                     return true
                 }
             })
+            return
+        }
+
+        // 전경 위치는 있지만 백그라운드 위치(항상 허용)가 없는 경우
+        if (!PermissionManager.hasBackgroundLocation(ctx)) {
+            Log.d("AndroidModule", "백그라운드 위치 권한 필요 → '항상 허용' 유도")
+            PermissionManager.requestBackgroundLocation(a)
+            promise.resolve(false)
             return
         }
 

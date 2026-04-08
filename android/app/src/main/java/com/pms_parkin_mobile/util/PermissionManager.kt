@@ -34,6 +34,15 @@ object PermissionManager {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    /** Android 10+ 백그라운드 위치(항상 허용) 권한  */
+    fun hasBackgroundLocation(ctx: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
+        return ContextCompat.checkSelfPermission(
+            ctx,
+            Manifest.permission.ACCESS_BACKGROUND_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     /** 위치(전경) 권한: FINE 또는 COARSE 둘 중 하나라도 OK면 true  */
     fun hasLocationPermissions(ctx: Context): Boolean {
         val fine = ContextCompat.checkSelfPermission(
@@ -179,6 +188,32 @@ object PermissionManager {
         }
     }
 
+    /**
+     * 백그라운드 위치(항상 허용) 요청
+     * - Android 11+(R): 시스템 정책상 런타임 다이얼로그 불가 → 설정 화면으로 이동
+     * - Android 10(Q): requestPermissions로 직접 요청 가능
+     */
+    fun requestBackgroundLocation(activity: Activity) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        if (hasBackgroundLocation(activity)) return
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11+: 앱 설정 → 권한 → 위치 → '항상 허용' 선택 유도
+            Toast.makeText(activity, "설정 > 권한 > 위치에서 '항상 허용'을 선택해주세요.", Toast.LENGTH_LONG).show()
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.parse("package:${activity.packageName}"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            activity.startActivity(intent)
+        } else {
+            // Android 10: 런타임 다이얼로그로 요청 가능
+            ActivityCompat.requestPermissions(
+                activity,
+                arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
+                REQ_BG_LOCATION
+            )
+        }
+    }
+
     /** 앱의 위치 권한 상세 화면(설정)  */
     fun openAppLocationSettings(ctx: Context) {
         val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
@@ -189,9 +224,10 @@ object PermissionManager {
 
     /* ---------- 편의 메서드 ---------- */
 
-    /** 전경 + 알림 + 블루투스 + 정확한 알람까지 모두 허용되었는지  */
+    /** 전경 + 백그라운드 위치 + 알림 + 블루투스 + 정확한 알람까지 모두 허용되었는지  */
     fun hasAllPrimaryPermissions(ctx: Context): Boolean {
         return hasLocationPermissions(ctx)
+                && hasBackgroundLocation(ctx)
                 && hasPostNotifications(ctx)
                 && hasNearbyScan(ctx)
                 && hasNearbyConnect(ctx)
@@ -223,6 +259,6 @@ object PermissionManager {
                 return false
             }
         }
-        return true
+        return hasBackgroundLocation(context)
     }
 }

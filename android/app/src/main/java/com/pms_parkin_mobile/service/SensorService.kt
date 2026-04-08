@@ -25,8 +25,9 @@ class SensorService : Service(), SensorEventListener {
 
     companion object {
         private const val TAG = "SensorService"
-        private const val NOTIFICATION_ID = 822
-        private const val CHANNEL_ID = "sensor_scan_channel"
+        // BluetoothService와 동일한 ID/채널 사용 → 알림 하나로 통합
+        private const val NOTIFICATION_ID = BluetoothService.FOREGROUND_NOTIFICATION_ID
+        private const val CHANNEL_ID = "ble_scan_channel"
 
         private const val LOW_PASS_ALPHA = 0.8f
         private const val CVA_THRESHOLD = 4.0f
@@ -92,18 +93,17 @@ class SensorService : Service(), SensorEventListener {
     }
 
     private fun startForegroundCompat() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val chan = NotificationChannel(CHANNEL_ID, "Sensor Service", NotificationManager.IMPORTANCE_LOW)
-            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(chan)
-        }
+        // BluetoothService가 이미 채널을 생성했으므로 채널 생성 생략
+        // 동일한 NOTIFICATION_ID로 startForeground → 시스템이 알림 하나만 표시
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("스마트파킹")
-            .setContentText("센서 데이터 감지 중")
+            .setContentText("백그라운드 스캔 실행 중")
             .setSmallIcon(R.drawable.logo)
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)} else {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        } else {
             startForeground(NOTIFICATION_ID, notification)
         }
     }
@@ -274,6 +274,11 @@ class SensorService : Service(), SensorEventListener {
         rollAxis.clear(); pitchAxis.clear(); yawAxis.clear()
         iMatchValue = 0; accelTimerJob?.cancel(); isAccelTimerRunning = false
         sensorDataStore.reset()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        startForegroundCompat()
     }
 
     override fun onDestroy() {

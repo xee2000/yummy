@@ -20,7 +20,10 @@ class BluetoothService : Service() {
         private const val CHANNEL_ID = "ble_scan_channel"
         const val FOREGROUND_NOTIFICATION_ID = 821
 
-        const val UUID_DONGTAN = "20151005-8864-5654-4159-013500201901"
+        //동탄
+//        const val UUID = "20151005-8864-5654-4159-013500201901"
+        //반석
+        const val UUID = "20151005-8864-5654-3020-013900202001"
         private const val BEACON_MANUFACTURER_ID = 0x4C
         private const val BEACON_SUBTYPE = 0x02
         private const val BEACON_SUBTYPE_LENGTH = 0x15
@@ -140,6 +143,8 @@ class BluetoothService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 앱 스와이프 후 재시작될 때 포그라운드 알림을 다시 올림
+        startForegroundCompat()
         if (scanWakeLock?.isHeld != true) acquireScanWakeLock()
         if (bluetoothAdapter.isEnabled && !isStartScanning) {
             startBluetoothScanning()
@@ -326,7 +331,7 @@ class BluetoothService : Service() {
         }
 
         val uuidRaw = bytesToHex(bytes, 2, 16)
-        val normalizedTargetUuid = UUID_DONGTAN.replace("-", "").lowercase()
+        val normalizedTargetUuid = UUID.replace("-", "").lowercase()
         Log.d("TEST", "수신 UUID: $uuidRaw")
         Log.d("TEST", "타겟 UUID: $normalizedTargetUuid")
         Log.d("TEST", "매칭 여부: ${uuidRaw.contains(normalizedTargetUuid)}")
@@ -408,6 +413,33 @@ class BluetoothService : Service() {
                 if (state == BluetoothAdapter.STATE_ON) resetAndRestartScanning()
                 else if (state == BluetoothAdapter.STATE_OFF) stopBluetoothScanning()
             }
+        }
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        testLog("🔄 [TaskRemoved] 앱 스와이프 감지 → 포그라운드 알림 즉시 복구")
+        // stopWithTask=false 이므로 서비스는 살아있음, 알림만 다시 올림
+        startForegroundCompat()
+
+        // 일부 기기에서 onTaskRemoved 후 서비스가 죽는 경우를 대비한 알람 백업
+        val intent = Intent(this, BluetoothService::class.java)
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        else PendingIntent.FLAG_UPDATE_CURRENT
+
+        val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            PendingIntent.getForegroundService(this, 9002, intent, flags)
+        } else {
+            PendingIntent.getService(this, 9002, intent, flags)
+        }
+
+        val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val triggerAt = SystemClock.elapsedRealtime() + 1_000L
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+        } else {
+            am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
         }
     }
 
