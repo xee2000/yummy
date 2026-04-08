@@ -81,9 +81,13 @@ android {
     defaultConfig {
         applicationId "com.pms_parkin_mobile"
         minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion 33
+        targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+    }
+    aaptOptions {
+        cruncherEnabled = false
+        noCompress "png", "jpg", "jpeg", "gif"
     }
     signingConfigs {
         debug {

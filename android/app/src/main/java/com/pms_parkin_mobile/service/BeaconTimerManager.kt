@@ -1,6 +1,7 @@
 package com.pms_parkin_mobile.service
 
 import android.content.Context
+import android.content.Intent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,6 +68,9 @@ class BeaconTimerManager(
     // AfterAccelTimer 만료 횟수 (원본 mAccelSendCount: 10회마다 로그 전송)
     private var accelSendCount: Int = 0
 
+    // 수동 주차(passive) 진입 시 WholeTimer 실행 여부 보존
+    private var wasWholeTimerRunningBeforePassive = false
+
     // ------------------------------------------------------------------------
     // WholeTimer (15분)
     // 주차 데이터 수집 전체 타임아웃 — 완료 시 ParkingOut
@@ -78,8 +82,14 @@ class BeaconTimerManager(
         state.isWorkingState   = true
         state.wholeTimerDelay  = 0
         Timber.d("BeaconTimerManager: ")
-        // SensorService 센서 상태 초기화 (이전 주차 데이터 잔존 방지)
-        SensorService.getInstance()?.resetSensorState()
+        // SensorService 센서 상태 초기화 (죽어있으면 재시작)
+        val svc = SensorService.getInstance()
+        Log.d("TEST", "▶ startWholeTimer: SensorService=${if (svc != null) "실행중" else "null → 재시작"}")
+        if (svc != null) {
+            svc.resetSensorState()
+        } else {
+            context.startService(Intent(context, SensorService::class.java))
+        }
 
         // WholeTimer 시작과 동시에 Dead-beacon 감시 타이머 시작
         startCalcTimer()
@@ -542,9 +552,10 @@ class BeaconTimerManager(
         Log.d("TEST", "AfterAccelTimer 시작 (10초)")
         afterAccelTimerJob = scope.launch {
             // 1초마다 afterAccelCount 확인 (원본 onTick 1000ms)
-            repeat(10) {
+            repeat(10) { tick ->
                 delay(1_000L)
                 if (!isAfterAccelRunning) return@launch  // 취소된 경우
+                Log.d("TEST", "AfterAccelTimer tick=${tick+1}/10, afterAccelCount=${state.afterAccelCount}")
 
                 if (state.afterAccelCount != 0 && !isWholeTimerRunning) {
                     Timber.d("BeaconTimerManager: AfterAccelTimer — 비콘 감지(${state.afterAccelCount}) → WholeTimer 시작")
@@ -621,6 +632,31 @@ class BeaconTimerManager(
             collectAccelBeaconTimerJob?.cancel()
             collectAccelBeaconTimerJob  = null
             isCollectAccelBeaconRunning = false
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // 수동 주차 (Passive) 일시정지 / 재가동
+    // ------------------------------------------------------------------------
+
+    /** passiveParking 호출 시: WholeTimer 실행 중이면 멈추고 상태 기억 */
+    fun pauseForPassive() {
+        wasWholeTimerRunningBeforePassive = isWholeTimerRunning
+        if (isWholeTimerRunning) {
+            cancelWholeTimer()
+            Timber.d("$TAG: [Passive] WholeTimer 일시정지 (수동주차 시작)")
+        }
+    }
+
+    /** passiveParkingEnd 호출 시: 이전에 실행 중이었으면 처음부터 재시작 */
+    fun resumeAfterPassive() {
+        if (wasWholeTimerRunningBeforePassive) {
+            wasWholeTimerRunningBeforePassive = false
+            startWholeTimer()
+            Timber.d("$TAG: [Passive] WholeTimer 재가동 (수동주차 종료)")
+        } else {
+            wasWholeTimerRunningBeforePassive = false
+            Timber.d("$TAG: [Passive] WholeTimer 비실행 상태였으므로 재가동 생략")
         }
     }
 

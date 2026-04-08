@@ -1,6 +1,7 @@
 package com.pms_parkin_mobile.service
 
 import android.content.Context
+import com.pms_parkin_mobile.dto.AccelBeacon
 import com.pms_parkin_mobile.service.ParkingStateManager
 import timber.log.Timber
 import java.util.TreeSet
@@ -97,6 +98,16 @@ class BeaconProcessor(private val context: Context) {
     // ------------------------------------------------------------------------
 
     fun processStayParking(minor: Int, rssi: Double) {
+        // 수동 주차 모드 중: 자동 주차 타이머 로직 스킵, 비콘 데이터만 수집
+        if (App.instance.isPassiveCheck) {
+            if (rssi >= -80) {
+                val id = if (minor > 32768) minor - 32768 else minor
+                val hexId = "%04X".format(id)
+                savePassiveBeacon(hexId, rssi)
+            }
+            return
+        }
+
         // AfterLobbyElevatorTimer 동작 중이면 비콘 수신 카운터 증가
         // 원본 StayBeacon: isAFTER_LOBBY_ELEVATOR_CHECK() 조건과 동일
 
@@ -156,6 +167,9 @@ class BeaconProcessor(private val context: Context) {
     // ------------------------------------------------------------------------
 
     fun processChangeParking(major: Int, minor: Int, rssi: Double) {
+        // 수동 주차 모드 중에는 자동 주차 서비스 로직 전체 스킵
+        if (App.instance.isPassiveCheck) return
+
         // AfterLobbyElevatorTimer 동작 중이면 비콘 수신 카운터 증가
         // 원본 ChangeBeacon: isAFTER_LOBBY_ELEVATOR_CHECK() 조건과 동일
         if (timers.isAfterLobbyElevatorRunning) state.afterLobbyEleCount++
@@ -194,6 +208,9 @@ class BeaconProcessor(private val context: Context) {
     // ------------------------------------------------------------------------
 
     fun processParkingEntrance(major: Int, minor: Int, rssi: Double) {
+        // 수동 주차 모드 중에는 자동 주차 서비스 로직 전체 스킵
+        if (App.instance.isPassiveCheck) return
+
         // 원본 PARKING_BEACON: isAfterStart / isAFTER_GYRO_START_CALC 카운터
         if (timers.isAfterAccelRunning) {
             state.afterStartCount++
@@ -242,6 +259,35 @@ class BeaconProcessor(private val context: Context) {
             timers.startWholeTimer()  // 재입차 WholeTimer 시작
 //            ParkingServiceApi.gateInformation(context, "RESTART_START", "RESTART_START")
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // 수동 주차 모드 전용: App.mAccelBeaconMap 에 직접 저장
+    // PassiveParkingService.parkingEnd() 가 이 맵을 읽어 위치 추정함
+    // ------------------------------------------------------------------------
+
+    private fun savePassiveBeacon(hexId: String, rssi: Double) {
+        val app = App.instance
+        synchronized(app.mAccelBeaconMap) {
+            val rssiStr = rssi.toInt().toString()
+            val existing = app.mAccelBeaconMap[hexId]
+            if (existing == null) {
+                val beacon = AccelBeacon().apply {
+                    beaconId = hexId
+                    this.rssi = rssiStr
+                    delayList.add("${rssi.toInt()}_0")
+                }
+                app.mAccelBeaconMap[hexId] = beacon
+            } else {
+                // RSSI 최댓값 갱신
+                if (rssi > (existing.rssi?.toDoubleOrNull() ?: Double.MIN_VALUE)) {
+                    existing.rssi = rssiStr
+                }
+                val idx = existing.delayList.size
+                existing.delayList.add("${rssi.toInt()}_$idx")
+            }
+        }
+        Log.d("Passive", "[PassiveBeacon] $hexId RSSI=$rssi")
     }
 
     // ------------------------------------------------------------------------

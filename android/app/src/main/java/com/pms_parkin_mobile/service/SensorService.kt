@@ -149,6 +149,7 @@ class SensorService : Service(), SensorEventListener {
     private fun startAccelTimer() {
         if (isAccelTimerRunning) return
         isAccelTimerRunning = true
+        Log.d("TEST", "▶ startAccelTimer 진입 (isWorkingState=${parkingState?.isWorkingState})")
 
         accelTimerJob = scope.launch {
             var prevState: String? = null
@@ -162,6 +163,7 @@ class SensorService : Service(), SensorEventListener {
                 val count = sensorDataStore.accelCount
                 val state = if (count < 3) "T" else if (count < 12) "S" else "W"
                 val delayTime = parkingState?.wholeTimerDelay ?: 0
+                Log.d("TEST", "state 시작 : " + state)
 
                 sensorDataStore.addAccelSensorData(AccelSensorData(state, delayTime.toString(), seq.toString()))
                 sensorDataStore.addAccelSensorData2(AccelSensorData2(count.toString(), delayTime.toString(), seq.toString()))

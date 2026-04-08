@@ -147,6 +147,67 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
         }
     }
 
+    //테스트용
+    @ReactMethod
+    fun TestpassiveParking(parkingCar: String) {
+        val app = App.instance
+        app.isPassiveCheck = true
+        app.parkingCar = parkingCar
+
+        // 💡 데이터 초기화: 이전 수집 기록 삭제
+        synchronized(app.mAccelBeaconMap) {
+            app.mAccelBeaconMap.clear()
+        }
+        app.resetDelayList()
+
+        // 자동 주차위치 서비스(WholeTimer) 일시정지 및 상태 기억
+        BluetoothService.getInstance()?.beaconTimers?.pauseForPassive()
+        SensorService.getInstance()?.resetSensorState()
+
+        Log.d("Passive", "🚀 수동 주차 모드 시작: 차량번호 $parkingCar")
+    }
+
+    @ReactMethod
+    fun TestpassiveParkingEnd(actualBeaconId: String, promise: Promise) {
+        try {
+            App.instance.isPassiveCheck = false
+            App.instance.isParkingStartFlag = true
+
+            val ctx: Context = reactApplicationContext
+            val service = PassiveParkingService.getInstance(ctx)
+            val result = service.parkingEnd()
+
+            if (result == null) {
+                promise.resolve(null)
+                return
+            }
+
+            // 입력된 비콘 ID로 실제 위치 CSV 조회
+            val actualCoord = service.getBeaconCoords(actualBeaconId)
+
+            val map = Arguments.createMap().apply {
+                putDouble("estimatedX", result.x)
+                putDouble("estimatedY", result.y)
+                putDouble("actualX", actualCoord?.x ?: 0.0)
+                putDouble("actualY", actualCoord?.y ?: 0.0)
+                putBoolean("actualFound", actualCoord != null)
+            }
+
+            Log.d("Passive", "수동주차위치 결과 map : $map")
+            promise.resolve(map)
+
+            // 데이터 초기화
+            App.instance.mAccelBeaconMap.clear()
+            App.instance.resetDelayList()
+
+            // 자동 주차위치 서비스(WholeTimer) 재가동 (수동주차 전 실행 중이었던 경우만)
+            BluetoothService.getInstance()?.beaconTimers?.resumeAfterPassive()
+            Log.d("Passive", "✅ 수동 주차 완료 → WholeTimer 재가동 시도")
+        } catch (e: Exception) {
+            promise.reject("PASSIVE_PARKING_END_ERROR", e)
+        }
+    }
+
     @ReactMethod
     fun passiveParking(parkingCar: String) {
         val app = App.instance
@@ -159,8 +220,8 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
         }
         app.resetDelayList()
 
-        // 자동 주차위치 서비스(WholeTimer) 완전 중지 및 초기화
-        BluetoothService.getInstance()?.beaconTimers?.cancelWholeTimer()
+        // 자동 주차위치 서비스(WholeTimer) 일시정지 및 상태 기억
+        BluetoothService.getInstance()?.beaconTimers?.pauseForPassive()
         SensorService.getInstance()?.resetSensorState()
 
         Log.d("Passive", "🚀 수동 주차 모드 시작: 차량번호 $parkingCar")
@@ -196,9 +257,9 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
             App.instance.mAccelBeaconMap.clear()
             App.instance.resetDelayList()
 
-            // 자동 주차위치 서비스(WholeTimer) 초기화 후 재시작
-            BluetoothService.getInstance()?.beaconTimers?.startWholeTimer()
-            Log.d("Passive", "✅ 수동 주차 완료 → WholeTimer 재시작")
+            // 자동 주차위치 서비스(WholeTimer) 재가동 (수동주차 전 실행 중이었던 경우만)
+            BluetoothService.getInstance()?.beaconTimers?.resumeAfterPassive()
+            Log.d("Passive", "✅ 수동 주차 완료 → WholeTimer 재가동 시도")
         } catch (e: Exception) {
             promise.reject("PASSIVE_PARKING_END_ERROR", e)
         }

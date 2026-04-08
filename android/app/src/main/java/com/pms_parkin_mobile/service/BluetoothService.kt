@@ -61,7 +61,6 @@ class BluetoothService : Service() {
     private var scanPendingIntent: PendingIntent? = null
     private var bluetoothReceiver: BLEBroadcastReceiver? = null
     private var screenReceiver: ScreenStateReceiver? = null
-    private var scanWakeLock: PowerManager.WakeLock? = null
 
     @Volatile private var isScreenOff = false
     @Volatile var isStartScanning = false
@@ -117,7 +116,6 @@ class BluetoothService : Service() {
         bluetoothAdapter = (getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).adapter
         beaconProcessor = BeaconProcessor(applicationContext)
 
-        acquireScanWakeLock() // 서비스 시작 즉시 WakeLock 획득
         setupReceivers()
         startForegroundCompat()
         mainHandler.post(scanHealthCheckRunnable)
@@ -145,7 +143,6 @@ class BluetoothService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // 앱 스와이프 후 재시작될 때 포그라운드 알림을 다시 올림
         startForegroundCompat()
-        if (scanWakeLock?.isHeld != true) acquireScanWakeLock()
         if (bluetoothAdapter.isEnabled && !isStartScanning) {
             startBluetoothScanning()
         }
@@ -224,7 +221,6 @@ class BluetoothService : Service() {
         stopBluetoothScanning()
         // 화면 꺼진 상태에서 postDelayed는 실행 보장 안 됨 → 즉시 재시작
         if (isScreenOff) {
-            acquireScanWakeLock()
             startBluetoothScanning()
         } else {
             mainHandler.postDelayed({ startBluetoothScanning() }, 500)
@@ -236,7 +232,6 @@ class BluetoothService : Service() {
         isScreenOff = off
         testLog("📱 [Screen] ${if (off) "OFF" else "ON"}")
 
-        if (off) acquireScanWakeLock()
         resetAndRestartScanning()
     }
 
@@ -295,19 +290,6 @@ class BluetoothService : Service() {
         }
     }
 
-    private fun acquireScanWakeLock() {
-        if (scanWakeLock?.isHeld == true) return
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        scanWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pms:ble_scan_lock")
-            .apply { acquire() } // 타임아웃 없이 무기한
-        testLog("🔒 [WakeLock] 획득")
-    }
-
-    private fun releaseScanWakeLock() {
-        if (scanWakeLock?.isHeld == true) scanWakeLock?.release()
-        testLog("🔓 [WakeLock] 해제")
-    }
-
     // =========================================================================
     // 데이터 처리
     // =========================================================================
@@ -317,24 +299,21 @@ class BluetoothService : Service() {
         val scanRecord = result.scanRecord ?: return
         val rssi = result.rssi
         val allManufacturerData = scanRecord.manufacturerSpecificData
-        Log.d("BLE_DEBUG", "제조사 데이터 개수: ${allManufacturerData?.size()}, RSSI: $rssi")
+//        Log.d("BLE_DEBUG", "제조사 데이터 개수: ${allManufacturerData?.size()}, RSSI: $rssi")
         for (i in 0 until (allManufacturerData?.size() ?: 0)) {
             val key = allManufacturerData!!.keyAt(i)
             val value = allManufacturerData.valueAt(i)
-            Log.d("BLE_DEBUG", "  키: 0x${key.toString(16).uppercase()}, 값: ${value.joinToString("") { "%02X".format(it) }}")
+//            Log.d("BLE_DEBUG", "  키: 0x${key.toString(16).uppercase()}, 값: ${value.joinToString("") { "%02X".format(it) }}")
         }
         val bytes = scanRecord.getManufacturerSpecificData(BEACON_MANUFACTURER_ID) ?: return
 
         if (bytes.size < 23 || (bytes[0].toInt() and 0xFF) != BEACON_SUBTYPE) {
-            Log.w(TAG, "⚠️ [Unknown Beacon] iBeacon 형식이 아님 (Size: ${bytes.size})")
+//            Log.w(TAG, "⚠️ [Unknown Beacon] iBeacon 형식이 아님 (Size: ${bytes.size})")
             return
         }
 
         val uuidRaw = bytesToHex(bytes, 2, 16)
         val normalizedTargetUuid = UUID.replace("-", "").lowercase()
-        Log.d("TEST", "수신 UUID: $uuidRaw")
-        Log.d("TEST", "타겟 UUID: $normalizedTargetUuid")
-        Log.d("TEST", "매칭 여부: ${uuidRaw.contains(normalizedTargetUuid)}")
         if (!uuidRaw.contains(normalizedTargetUuid)) return
 
         val major = bytesToHex(bytes, 18, 2).toInt(16)
@@ -446,7 +425,6 @@ class BluetoothService : Service() {
     override fun onDestroy() {
         mainHandler.removeCallbacksAndMessages(null)
         stopBluetoothScanning()
-        releaseScanWakeLock()
         try {
             unregisterReceiver(bluetoothReceiver)
             unregisterReceiver(screenReceiver)

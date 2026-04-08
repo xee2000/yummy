@@ -150,6 +150,10 @@ class PassiveParkingService private constructor(context: Context) {
         } else null
     }
 
+    fun getBeaconCoords(id: String): BeaconLocation? {
+        return beaconCoords[id.trim().padStart(4, '0').uppercase()]
+    }
+
     companion object {
         private const val TAG = "PassiveParkingService"
         private var instance: PassiveParkingService? = null
