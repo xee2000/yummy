@@ -43,11 +43,11 @@ const Home = () => {
     return selectedCar.carNumber || selectedCar;
   }, [selectedCar]);
 
-  const fetchLobbyInfo = useCallback(async (targetDong, targetUserId) => {
-    if (!targetDong || !targetUserId) return;
+  const fetchLobbyInfo = useCallback(async (targetDong, targetHo) => {
+    if (!targetDong || !targetHo) return;
     try {
       const res = await RestApi.post('/app/openLobby/findByDong', null, {
-        params: { dong: Number(targetDong), userId: String(targetUserId) },
+        params: { dong: Number(targetDong), ho: Number(targetHo) },
       });
       setLobbyList(Array.isArray(res?.data) ? res.data : []);
     } catch (e) {
@@ -56,6 +56,7 @@ const Home = () => {
   }, []);
 
   const fetchCars = useCallback(async (d, h) => {
+    console.log('dong ho : ' + d + " ho : " + h);
     if (!d || !h) return;
     setCarsLoading(true);
     try {
@@ -186,14 +187,53 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
     }
   }, [userId, dong, ho, selectedCarNumber, parkingResult]); // ✨ 의존성 배열에 parkingResult 필수
 
+  // -----------------------------------------------------------
+  // ✅ 3. 공동현관 문열기
+  // -----------------------------------------------------------
+  const handleLobbyOpen = useCallback(async (item) => {
+    try {
+      const formData = [
+        `id=${encodeURIComponent(userId || '')}`,
+        `dong=${encodeURIComponent(dong || '')}`,
+        `ho=${encodeURIComponent(ho || '')}`,
+        `minor=${encodeURIComponent(item.minor || '')}`,
+        `rssi=${encodeURIComponent(item.rssi || '')}`,
+      ].join('&');
+
+      const res = await RestApi.post('/pass/openLobby', formData, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+
+      console.log('[Lobby] open result:', JSON.stringify(res?.data));
+
+      const code = res?.data?.code;
+      if (code === 0) {
+        Alert.alert('성공', '문이 열렸습니다.');
+      } else {
+        const msg = res?.data?.message || '문열기에 실패했습니다.';
+        Alert.alert('실패', msg);
+      }
+    } catch (e) {
+      console.warn('[Lobby] open error:', e.message);
+      Alert.alert('오류', '문열기에 실패했습니다.');
+    }
+  }, [userId, dong, ho]);
+
   const loadInitialData = useCallback(async () => {
     try {
-      const userData = await EncryptedStorage.getItem('user');
+      const [userData, area] = await Promise.all([
+        EncryptedStorage.getItem('user'),
+        EncryptedStorage.getItem('area'),
+      ]);
       if (userData) {
         const parsed = JSON.parse(userData);
-        setDong(parsed?.dong); setHo(parsed?.ho); setUserId(parsed?.userId || parsed?.id);
-        fetchLobbyInfo(parsed?.dong, parsed?.userId || parsed?.id);
-        fetchCars(parsed?.dong, parsed?.ho);
+        const data = area === 'dongtan' ? (parsed.result ?? parsed) : parsed;
+        const resolvedUserId = data?.userId || data?.id || null;
+        setDong(data?.dong);
+        setHo(data?.ho);
+        setUserId(resolvedUserId);
+        fetchLobbyInfo(data?.dong, data?.ho);
+        fetchCars(data?.dong, data?.ho);
       }
     } catch (e) {
       console.warn('[Home] load error:', e);
@@ -211,14 +251,14 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadInitialData} />}
       >
         <View style={styles.inner}>
-          <View style={styles.carSelectBox}>
+          {/* <View style={styles.carSelectBox}>
             <Text style={styles.carSelectLabel}>선택 차량</Text>
             <TouchableOpacity style={styles.carSelectBtn} onPress={() => setCarsModalOpen(true)} disabled={passiveBusy}>
               <Text style={styles.carSelectText}>{selectedCarNumber || '차량을 선택하세요'}</Text>
             </TouchableOpacity>
-          </View>
+          </View> */}
 
-          <View style={styles.centerButtonArea}>
+          {/* <View style={styles.centerButtonArea}>
             <TouchableOpacity
               style={[styles.btn, styles.btnOutline, (passiveBusy || !selectedCarNumber) && styles.btnDisabled]}
               onPress={handleManualParkPosition}
@@ -231,12 +271,12 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
                 </View>
               ) : <Text style={styles.btnOutlineText}>수동 주차위치 수집</Text>}
             </TouchableOpacity>
-          </View>
+          </View> */}
 
           <View style={styles.lobbyArea}>
             <Text style={styles.sectionTitle}>공동현관 제어</Text>
             {lobbyList.map(item => (
-              <TouchableOpacity key={item.id} style={[styles.btn, styles.btnPrimary, styles.lobbyBtn]} onPress={() => {}}>
+              <TouchableOpacity key={item.id} style={[styles.btn, styles.btnPrimary, styles.lobbyBtn]} onPress={() => handleLobbyOpen(item)}>
                 <Text style={styles.btnPrimaryText}>{item.floor}층 {item.line}라인 문열기</Text>
               </TouchableOpacity>
             ))}
@@ -245,7 +285,7 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
       </ScrollView>
 
       {/* 차량 선택 모달 */}
-      <Modal visible={carsModalOpen} transparent={true} animationType="slide">
+      {/* <Modal visible={carsModalOpen} transparent={true} animationType="slide">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCarsModalOpen(false)}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}><Text style={styles.modalTitle}>차량 선택</Text></View>
@@ -262,10 +302,10 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
             />
           </View>
         </TouchableOpacity>
-      </Modal>
+      </Modal> */}
 
       {/* 위치 확인 모달 (parkingResult가 있을 때만 내용 표시) */}
-      <Modal visible={confirmModalOpen} animationType="fade" transparent={true}>
+      {/* <Modal visible={confirmModalOpen} animationType="fade" transparent={true}>
         <View style={styles.modalFullOverlay}>
           {parkingResult && (
             <View style={styles.confirmModalContent}>
@@ -285,7 +325,7 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
             </View>
           )}
         </View>
-      </Modal>
+      </Modal> */}
     </SafeScreen>
   );
 };

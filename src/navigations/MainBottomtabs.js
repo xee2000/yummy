@@ -19,7 +19,7 @@ const MainBottomTabs = () => {
         tabBarInactiveTintColor: '#999',
       }}
     >
-      <Tab.Screen
+      {/* <Tab.Screen
         name="Parking"
         component={Parking}
         options={{
@@ -28,7 +28,7 @@ const MainBottomTabs = () => {
             <Icon name="map-outline" color={color} size={size} />
           ),
         }}
-      />
+      /> */}
       <Tab.Screen
         name="Home"
         component={Home}
@@ -40,7 +40,7 @@ const MainBottomTabs = () => {
         }}
       />
 
-      <Tab.Screen
+      {/* <Tab.Screen
         name="TestHome"
         component={TestHome}
         options={{
@@ -49,7 +49,7 @@ const MainBottomTabs = () => {
             <Icon name="home-outline" color={color} size={size} />
           ),
         }}
-      />
+      /> */}
       <Tab.Screen
         name="Option"
         component={Option}

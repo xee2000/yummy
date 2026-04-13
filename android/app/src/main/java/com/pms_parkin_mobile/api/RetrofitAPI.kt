@@ -32,10 +32,13 @@ interface RetrofitAPI {
     fun openLobby(
         @Field("id") id: String?,
         @Field("dong") dong: String?,
+
+
+
         @Field("ho") ho: String?,
         @Field("minor") minor: String?,
         @Field("rssi") rssi: String?
-    ): Call<Void?>?
+    ): Call<Map<String, Any>>?
 
     @POST("app/openLobby/check")
     fun openLobbyinit(@Query("userId") userId: String?): Call<Void?>?
@@ -52,7 +55,7 @@ interface RetrofitAPI {
         @Query("message") errorMessage: String?
     ): Call<Void?>?
 
-    @GET("app/message")
+    @POST("app/message")
     fun Message(
         @Query("userId") userId: String?,
         @Query("message") message: String?

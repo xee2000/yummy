@@ -23,13 +23,18 @@ const Header = () => {
     // 1. 유저 데이터 로드
     const loadUserData = async () => {
       try {
-        const userData = await EncryptedStorage.getItem('user');
+        const [userData, area] = await Promise.all([
+          EncryptedStorage.getItem('user'),
+          EncryptedStorage.getItem('area'),
+        ]);
+        console.log('userData : ' + JSON.stringify(userData));
         if (userData) {
           const parsed = JSON.parse(userData);
+          const data = area === 'dongtan' ? (parsed.result ?? parsed) : parsed;
           setUserInfo({
-            dong: parsed.dong || '',
-            ho: parsed.ho || '',
-            alias: parsed.name || '',
+            dong: data.dong || '',
+            ho: data.ho || '',
+            alias: data.alias || data.name || '',
           });
         }
       } catch (e) {

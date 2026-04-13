@@ -118,7 +118,7 @@ class RestController private constructor() {
         sendParking(context, parkingTotal)
     }
 
-    fun openLobby(lobbyOpenData: LobbyOpenData) {
+    fun openLobby(lobbyOpenData: LobbyOpenData, onResult: ((Int, String?) -> Unit)? = null) {
         Log.d(TAG, "openLobby 요청 시작 - Minor: ${lobbyOpenData.minor}")
         val call = retrofitAPI.openLobby(
             lobbyOpenData.id,
@@ -128,24 +128,27 @@ class RestController private constructor() {
             lobbyOpenData.rssi
         )
 
-        call?.enqueue(object : Callback<Void?> {
-            override fun onResponse(call: Call<Void?>, response: Response<Void?>) {
+        call?.enqueue(object : Callback<Map<String, Any>> {
+            override fun onResponse(call: Call<Map<String, Any>>, response: Response<Map<String, Any>>) {
                 if (response.isSuccessful) {
-                    Log.d(TAG, "openLobby 성공 [Minor: ${lobbyOpenData.minor}]")
-                    val context = App.instance?.context ?: return
-                    val intent = Intent(context, OpenLobbyAlarm::class.java)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        context.startForegroundService(intent)
-                    } else {
-                        context.startService(intent)
-                    }
+                    val body = response.body()
+                    Log.d(TAG, "응답 body 전체: $body") // 키 이름 확인용
+
+                    val returnCode = (body?.get("returnCode") as? Double)?.toInt()
+                        ?: (body?.get("returnCode") as? Int)
+                        ?: -1
+                    val message = body?.get("message") as? String
+
+                    Log.d(TAG, "openLobby 응답 code=$returnCode, message=$message")
+                    onResult?.invoke(returnCode, message)
                 } else {
-                    Log.e(TAG, "openLobby 실패 (코드): ${response.code()}")
+                    onResult?.invoke(-1, null)
                 }
             }
 
-            override fun onFailure(call: Call<Void?>, t: Throwable) {
+            override fun onFailure(call: Call<Map<String, Any>>, t: Throwable) {
                 Log.e(TAG, "openLobby 네트워크 오류: ${t.message}")
+                onResult?.invoke(-1, null)
             }
         })
     }

@@ -10,6 +10,7 @@ import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.pms_parkin_mobile.R
+import com.pms_parkin_mobile.api.RestController
 import java.util.concurrent.ConcurrentHashMap
 
 @SuppressLint("MissingPermission")
@@ -22,8 +23,10 @@ class BluetoothService : Service() {
 
         //동탄
 //        const val UUID = "20151005-8864-5654-4159-013500201901"
+        //광교
+        const val UUID = "20151005-8864-5654-4111-710200210801"
         //반석
-        const val UUID = "20151005-8864-5654-3020-013900202001"
+//        const val UUID = "20151005-8864-5654-3020-013900202001"
         private const val BEACON_MANUFACTURER_ID = 0x4C
         private const val BEACON_SUBTYPE = 0x02
         private const val BEACON_SUBTYPE_LENGTH = 0x15
@@ -316,10 +319,11 @@ class BluetoothService : Service() {
         val normalizedTargetUuid = UUID.replace("-", "").lowercase()
         if (!uuidRaw.contains(normalizedTargetUuid)) return
 
-        val major = bytesToHex(bytes, 18, 2).toInt(16)
-        val minor = bytesToHex(bytes, 20, 2).toInt(16)
+        val buf = java.nio.ByteBuffer.wrap(bytes)
+        val major = buf.getShort(18).toInt() and 0xFFFF
+        val minor = buf.getShort(20).toInt() and 0xFFFF
 
-        Log.i(TAG, "✅ [Match] Major: $major, Minor: $minor, RSSI: $rssi")
+        Log.i(TAG, "✅ [Match] Major: $major, Minor: $minor (${String.format("%04X", minor)}), RSSI: $rssi")
         processBeacon(major, minor, rssi.toDouble())
     }
 
@@ -335,16 +339,18 @@ class BluetoothService : Service() {
 
         when (major) {
             1 -> {
+                if(!App.instance.isPassOpenLobbyFlag) return;
                 Log.i(TAG, "🏢 [Lobby] 로비 감지 (Minor: $minor, SmoothRSSI: ${"%.1f".format(smoothedRssi)})")
+                RestController.instance.Message("로비비컨 감지 : " + minor)
                 BeaconFunction.getInstance().OnlyOpenLobby(minor, smoothedRssi)
             }
             4 -> {
                 Log.i(TAG, "🚗 [Stay] 주차면 감지 (Minor: $minor, SmoothRSSI: ${"%.1f".format(smoothedRssi)})")
-                beaconProcessor.processStayParking(minor, smoothedRssi)
+//                beaconProcessor.processStayParking(minor, smoothedRssi)
             }
             5 -> {
                 Log.i(TAG, "🔄 [Change] 주차면 변화 감지 (Major: 5, Minor: $minor)")
-                beaconProcessor.processChangeParking(major, minor, smoothedRssi)
+//                beaconProcessor.processChangeParking(major, minor, smoothedRssi)
             }
             else -> Log.d(TAG, "❓ [Other] 정의되지 않은 Major: $major")
         }

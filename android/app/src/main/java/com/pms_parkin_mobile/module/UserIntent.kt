@@ -20,32 +20,52 @@ class UserIntent : IntentService("UserIntent") {
                     Log.d("UserIntent", "Received data: " + data)
 
                     // 1. JSON 객체 생성
-                    val jsonObject = JSONObject(data)
+                    val root = JSONObject(data)
 
-                    // 2. 싱글톤 인스턴스 가져오기 및 데이터 세팅
+                    // 2. 동탄은 result 하위 중첩, 광교는 루트 — 둘 다 대응
+                    val payload = if (root.has("result")) root.getJSONObject("result") else root
+
+                    // 3. 싱글톤 인스턴스 가져오기 및 데이터 세팅
                     val userStore = UserDataSingleton.instance
 
-                    userStore.setDong(jsonObject.optString("dong"))
-                    userStore.setHo(jsonObject.optString("ho"))
-                    userStore.setUserName(jsonObject.optString("name"))
-                    userStore.setCel(jsonObject.optString("cel"))
-                    userStore.userId = jsonObject.optString("userId")
-                    // 3. minorList 파싱 및 ArrayList 저장
-                    if (jsonObject.has("minorList")) {
-                        val jsonArray = jsonObject.getJSONArray("minorList")
-                        val minorList = ArrayList<LobbyOpenData>()
+                    // 키 없거나 빈 값이면 null 반환하는 헬퍼
+                    fun resolve(vararg keys: String): String? {
+                        for (key in keys) {
+                            val v = payload.optString(key, null)
+                                ?: root.optString(key, null)
+                            if (!v.isNullOrEmpty()) return v
+                        }
+                        return null
+                    }
 
-                        for (i in 0..<jsonArray.length()) {
-                            val item = jsonArray.getJSONObject(i)
+                    userStore.setDong(resolve("dong"))
+                    userStore.setHo(resolve("ho"))
+                    userStore.setUserName(resolve("name"))
+                    userStore.setCel(resolve("cel"))
+                    val resolvedUserId = resolve("userId", "d")
+                    userStore.setID(resolve("userId"))
+
+                    Log.d("UserIntent", "dong=${userStore.getDong()} ho=${userStore.getHo()} userId=$resolvedUserId")
+
+                    // 4. minorList 파싱 — payload 또는 root 어디에 있든 처리
+                    val minorArray = when {
+                        payload.has("minorList") -> payload.getJSONArray("minorList")
+                        root.has("minorList")    -> root.getJSONArray("minorList")
+                        else                     -> null
+                    }
+                    if (minorArray != null) {
+                        val minorList = ArrayList<LobbyOpenData>()
+                        for (i in 0..<minorArray.length()) {
+                            val item = minorArray.getJSONObject(i)
                             val lobbyData = LobbyOpenData()
                             lobbyData.minor = item.optString("minor")
-                            lobbyData.rssi = item.optString("rssi")
-                            lobbyData.id = jsonObject.optString("userId")
-                            lobbyData.dong = jsonObject.optString("dong")
-                            lobbyData.ho = jsonObject.optString("ho")
+                            lobbyData.rssi   = item.optString("rssi")
+                            lobbyData.id     = resolvedUserId
+                            lobbyData.dong   = userStore.getDong()
+                            lobbyData.ho     = userStore.getHo()
                             minorList.add(lobbyData)
                         }
-                        Log.d("Ble", "minorList : " + minorList)
+                        Log.d("Ble", "minorList : $minorList")
                         userStore.setOpenMINOR(minorList)
                     }
                 } else {

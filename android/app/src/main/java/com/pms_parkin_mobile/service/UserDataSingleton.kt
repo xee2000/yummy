@@ -122,10 +122,10 @@ class UserDataSingleton private constructor() {
         save("cel", cel)
     }
 
-//    fun setID(id: String?) {
-//        this.ID = id
-//        save("id", id)
-//    }
+    fun setID(id: String?) {
+        this.ID = id
+        save("id", id)
+    }
 
     fun setIsDriver(isDriver: Boolean) {
         this.isIsDriver = isDriver

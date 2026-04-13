@@ -3,6 +3,7 @@ package com.pms_parkin_mobile.service
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import com.pms_parkin_mobile.api.RestController
 import com.pms_parkin_mobile.dto.AccelBeacon
 import com.pms_parkin_mobile.dto.Beacon
 import com.pms_parkin_mobile.dto.User
@@ -186,6 +187,23 @@ class App private constructor() {
         this.context = context.applicationContext
         loadUserInfo()
         UserDataSingleton.instance.init(context)
+        setupCrashLogger()
+    }
+
+    private fun setupCrashLogger() {
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val stackTrace = throwable.stackTrace
+                    .take(10)
+                    .joinToString("\n") { "  at ${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})" }
+                val crashMsg = "[CRASH] ${throwable.javaClass.simpleName}: ${throwable.message}\n$stackTrace"
+                Log.e("CRASH", crashMsg)
+                RestController.instance.Message(crashMsg)
+                Thread.sleep(500) // 전송 대기
+            } catch (_: Exception) {}
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
     }
 
     fun setDelayList(value: String): LinkedHashSet<String> {

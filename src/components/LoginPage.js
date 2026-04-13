@@ -26,11 +26,12 @@ const LoginPage = () => {
   const { AndroidModule } = NativeModules;
 
   const [userId, setUserId] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPermModal, setShowPermModal] = useState(false);
+  const [selectedArea, setSelectedArea] = useState(null); // 'dongtan' | 'gwanggyo'
 
-  // ✅ 버튼 활성화 조건: 아이디만 입력되어도 가능하게 수정
-  const canSubmit = userId.trim().length > 0 && !loading;
+  const canSubmit = userId.trim().length > 0 && password.trim().length > 0 && selectedArea !== null && !loading;
 
   useEffect(() => {
     const checkInitialPermissions = async () => {
@@ -67,10 +68,27 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-      // ✅ API 쏠 때 dong, ho 데이터 제외
-      const formData = `userId=${encodeURIComponent(userId)}`;
+      let formData;
+      let endpoint;
 
-      const response = await RestApi.post('/app/login', formData, {
+      if (selectedArea === 'dongtan') {
+        // @ModelAttribute("loginOld") → id, pass, site 키
+        formData = [
+          `id=${encodeURIComponent(userId)}`,
+          `pass=${encodeURIComponent(password)}`,
+          `site=dongtan`,
+        ].join('&');
+        endpoint = '/app/loginOld';
+      } else {
+        // 광교
+        formData = `id=${encodeURIComponent(userId)}&pass=${encodeURIComponent(password)}`;
+        endpoint = '/app/login';
+      }
+
+      // 인터셉터가 area를 읽어 baseURL을 결정하므로 요청 전에 먼저 저장
+      await EncryptedStorage.setItem('area', selectedArea);
+
+      const response = await RestApi.post(endpoint, formData, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
@@ -91,7 +109,7 @@ const LoginPage = () => {
       const errorMsg =
         e.response?.data?.message || '로그인 중 오류가 발생했습니다.';
       Alert.alert('로그인 실패', errorMsg);
-    } finally {
+    } finally { 
       setLoading(false);
     }
   };
@@ -121,6 +139,27 @@ const LoginPage = () => {
 
         <View style={styles.form}>
           <View style={styles.inputWrap}>
+            <Text style={styles.label}>지역 선택</Text>
+            <View style={styles.areaRow}>
+              {[
+                { key: 'dongtan',  label: '동탄더샵' },
+                { key: 'gwanggyo', label: '광교레이크시티' },
+              ].map(({ key, label }) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.areaBtn, selectedArea === key && styles.areaBtnSelected]}
+                  onPress={() => setSelectedArea(key)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.areaBtnText, selectedArea === key && styles.areaBtnTextSelected]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.inputWrap}>
             <Text style={styles.label}>아이디</Text>
             <TextInput
               style={styles.input}
@@ -133,7 +172,19 @@ const LoginPage = () => {
             />
           </View>
 
-          {/* ❌ 동/호 입력 필드 영역 삭제됨 */}
+          <View style={styles.inputWrap}>
+            <Text style={styles.label}>비밀번호</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="비밀번호를 입력하세요"
+              placeholderTextColor="#9AA3AF"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={true}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
 
           <View style={styles.subActions}>
             <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
@@ -220,6 +271,33 @@ const styles = StyleSheet.create({
   loginButtonText: {
     fontSize: hp('2.2%'),
     color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  areaRow: {
+    flexDirection: 'row',
+    gap: wp('3%'),
+  },
+  areaBtn: {
+    flex: 1,
+    height: hp('6.5%'),
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    borderRadius: wp('3%'),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+  areaBtnSelected: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+  },
+  areaBtnText: {
+    fontSize: hp('1.9%'),
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  areaBtnTextSelected: {
+    color: '#2563EB',
     fontWeight: '800',
   },
 });
