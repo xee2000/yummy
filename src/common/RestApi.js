@@ -6,6 +6,12 @@ const BASE_URLS = {
   gwanggyo: 'http://211.52.72.27:4000/pms-server-web',
 };
 
+const BASE_UUID = {
+  dongtan:  '20151005-8864-5654-4159-013500201901',
+  gwanggyo: '20151005-8864-5654-4111-710200210801',
+};
+
+
 const RestApi = axios.create();
 
 // 요청마다 저장된 area로 baseURL 자동 전환
@@ -21,4 +27,5 @@ RestApi.interceptors.request.use(async config => {
   return config;
 });
 
+export { BASE_UUID };
 export default RestApi;

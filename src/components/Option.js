@@ -25,6 +25,8 @@ const Option = ({ navigation }) => {
   const [sensorOk, setSensorOk] = useState(false);
   // serviceEnabled: 자동 문열림 서비스 로직 활성화 여부 (Lobby 플래그)
   const [serviceEnabled, setServiceEnabled] = useState(false);
+  // alarmEnabled: 공동현관 알림 on/off
+  const [alarmEnabled, setAlarmEnabled] = useState(true);
 
   const { AndroidModule } = NativeModules;
 
@@ -39,6 +41,7 @@ const Option = ({ navigation }) => {
 
         setSensorOk(!!res?.Ble);
         setServiceEnabled(!!res?.Lobby);
+        setAlarmEnabled(res?.AlarmFlag !== false); // 기본값 true
       }
     } catch (err) {
       console.error('[Option] ServiceCheck failed:', err);
@@ -114,6 +117,24 @@ const Option = ({ navigation }) => {
     }
   }, [serviceEnabled, AndroidModule, checkServiceStatus]);
 
+  // -----------------------------
+  // ✅ 3. 공동현관 알림 토글 (AlarmFlag)
+  // -----------------------------
+  const onToggleAlarm = useCallback(async () => {
+    try {
+      const nextStatus = !alarmEnabled;
+      if (Platform.OS === 'android' && AndroidModule?.setOpenLobbyAlarmFlag) {
+        await AndroidModule.setOpenLobbyAlarmFlag(nextStatus);
+        await checkServiceStatus();
+      } else {
+        setAlarmEnabled(nextStatus);
+      }
+    } catch (err) {
+      console.error('setOpenLobbyAlarmFlag failed:', err);
+      Alert.alert('오류', '공동현관 알림 설정 변경에 실패했습니다.');
+    }
+  }, [alarmEnabled, AndroidModule, checkServiceStatus]);
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.header}>설정 메뉴</Text>
@@ -127,7 +148,7 @@ const Option = ({ navigation }) => {
       </TouchableOpacity>
 
       {/* ✅ 주차위치 서비스 영역 (Switch 추가) */}
-      {/* <View style={styles.itemRow}>
+      <View style={styles.itemRow}>
         <View>
           <Text style={styles.itemLabel}>주차위치 서비스 상태</Text>
         </View>
@@ -144,7 +165,7 @@ const Option = ({ navigation }) => {
             style={{ marginLeft: 8 }}
           />
         </View>
-      </View> */}
+      </View>
 
       {/* ✅ 자동 문열림 서비스 영역 */}
       <View style={styles.itemRow}>
@@ -161,6 +182,26 @@ const Option = ({ navigation }) => {
             value={serviceEnabled}
             onValueChange={onToggleService}
             trackColor={{ false: '#d1d5db', true: '#10b981' }} // 문열림은 초록색 계열
+            thumbColor={'#ffffff'}
+            ios_backgroundColor="#d1d5db"
+            style={{ marginLeft: 8 }}
+          />
+        </View>
+      </View>
+
+      {/* ✅ 공동현관 알림 on/off */}
+      <View style={styles.itemRow}>
+        <View>
+          <Text style={styles.itemLabel}>공동현관 알림</Text>
+        </View>
+        <View style={styles.rightWrap}>
+          <Text style={[styles.stateText, alarmEnabled ? styles.on : styles.off]}>
+            {alarmEnabled ? '켜짐' : '꺼짐'}
+          </Text>
+          <Switch
+            value={alarmEnabled}
+            onValueChange={onToggleAlarm}
+            trackColor={{ false: '#d1d5db', true: '#f59e0b' }}
             thumbColor={'#ffffff'}
             ios_backgroundColor="#d1d5db"
             style={{ marginLeft: 8 }}

@@ -19,6 +19,7 @@ import com.pms_parkin_mobile.service.App
 import com.pms_parkin_mobile.service.BluetoothService
 import com.pms_parkin_mobile.service.PassiveParkingService
 import com.pms_parkin_mobile.service.SensorService
+import com.pms_parkin_mobile.service.UserDataSingleton
 import com.pms_parkin_mobile.util.PermissionManager
 import com.pms_parkin_mobile.receiver.BleScanReceiver
 class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
@@ -86,11 +87,13 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
         }
 
         val openLobbyFlag = App.instance.isPassOpenLobbyFlag
-        Log.d("SERVICE_CHECK", "bleRunning=$bleRunning serviceFlag=$serviceFlag lobbyFlag=$openLobbyFlag")
+        val alarmFlag = UserDataSingleton.instance.openLobbyAlarmFlag
+        Log.d("SERVICE_CHECK", "bleRunning=$bleRunning serviceFlag=$serviceFlag lobbyFlag=$openLobbyFlag alarmFlag=$alarmFlag")
 
         val map = Arguments.createMap().apply {
             putBoolean("Ble", bleRunning)
             putBoolean("Lobby", openLobbyFlag)
+            putBoolean("AlarmFlag", alarmFlag)
         }
         promise.resolve(map)
     }
@@ -273,6 +276,12 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
         } catch (e: Exception) {
             promise.reject("CHECK_PERMISSION_ERROR", e.message)
         }
+    }
+
+    @ReactMethod
+    fun setOpenLobbyAlarmFlag(flag: Boolean) {
+        Log.d("AndroidModule", "setOpenLobbyAlarmFlag : $flag")
+        UserDataSingleton.instance.setOpenLobbyAlarmFlag(flag)
     }
 
     @ReactMethod

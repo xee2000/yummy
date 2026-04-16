@@ -18,26 +18,40 @@ const ORIGIN_W = 1572;
 const ORIGIN_H = 1146;
 
 const MAP_IMAGES = {
-  P1: require('../assets/P1.png'),
-  P2_E: require('../assets/P2.png'),
-  P2_W: require('../assets/P5.png'),
-  P3_G: require('../assets/P3.png'),
-  P3_B: require('../assets/P4.png'),
-  default: require('../assets/P1.png'),
+  dongtan: {
+    P1:   require('../assets/dongtan/P1.png'),
+    P2_E: require('../assets/dongtan/P2_E.png'),
+    P2_W: require('../assets/dongtan/P2_W.png'),
+    P3_G: require('../assets/dongtan/P3_G.png'),
+    P3_B: require('../assets/dongtan/P3_B.png'),
+    default: require('../assets/dongtan/P1.png'),
+  },
+  gwanggyo: {
+    'B1-103': require('../assets/gwanggyo/B1-103.png'),
+    'B1-104': require('../assets/gwanggyo/B1-104.png'),
+    'B2-101': require('../assets/gwanggyo/B2-101.png'),
+    'B2-102': require('../assets/gwanggyo/B2-102.png'),
+    'B2-103': require('../assets/gwanggyo/B2-103.png'),
+    'B2-104': require('../assets/gwanggyo/B2-104.png'),
+    'B2-G':   require('../assets/gwanggyo/B2-G.png'),
+    'B3-101': require('../assets/gwanggyo/B3-101.png'),
+    'B3-102': require('../assets/gwanggyo/B3-102.png'),
+    'B3-103': require('../assets/gwanggyo/B3-103.png'),
+    'B3-104': require('../assets/gwanggyo/B3-104.png'),
+    default:  require('../assets/gwanggyo/B1-103.png'),
+  },
 };
 
-const PassParkingLocation = ({ deviceLoc, visible, focusKey }) => {
+const PassParkingLocation = ({ deviceLoc, visible, focusKey, area }) => {
   const zoomRef = useRef(null);
   const [layoutSize, setLayoutSize] = useState({ width: 0, height: 0 });
 
-  // 1. 서버 mapId에 따른 배경 이미지 선택
+  // 1. 현장(area) + mapId에 따른 배경 이미지 선택
   const floorImage = useMemo(() => {
+    const maps = MAP_IMAGES[area] ?? MAP_IMAGES.dongtan;
     const mapId = deviceLoc?.floor;
-    if (mapId && MAP_IMAGES[mapId]) {
-      return MAP_IMAGES[mapId];
-    }
-    return MAP_IMAGES.default;
-  }, [deviceLoc?.floor]);
+    return (mapId && maps[mapId]) ? maps[mapId] : maps.default;
+  }, [deviceLoc?.floor, area]);
 
   const onLayout = useCallback(e => {
     const { width, height } = e.nativeEvent.layout;

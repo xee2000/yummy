@@ -9,7 +9,7 @@ const DOT_SIZE = 18;
 const ORIGIN_W = 1572;
 const ORIGIN_H = 1146;
 
-const MAP_IMAGE = require('../assets/B1.png');
+const MAP_IMAGE = require('../assets/dongtan/P1.png');
 
 const calcDotStyle = (loc, layoutSize, color) => {
   const { width, height } = layoutSize;

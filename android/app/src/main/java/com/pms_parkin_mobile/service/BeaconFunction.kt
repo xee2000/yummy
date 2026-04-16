@@ -73,12 +73,13 @@ class BeaconFunction {
         }
 
         val minorHex = String.format("%04X", minor)
+        RestController.instance.openLobbyinit("스캔된 minor(dec) : $minor → hex : $minorHex / lobbyData 개수 : ${lobbyOpenData.size}")
 
         for (data in lobbyOpenData) {
             val lobbyMinor = data.minor          // DB Hex 문자열 (ex: "0721")
             val targetRssi = data.rssi?.toDoubleOrNull() ?: -100.0
 
-            RestController.instance.openLobbyinit("갖고있는 Minor : $lobbyMinor" + " 스캔된 Minor : " + minorHex)
+            RestController.instance.openLobbyinit("갖고있는 Minor : $lobbyMinor / 스캔된 Minor : $minorHex")
 
             // DB Hex vs 스캔 Hex 직접 비교 (대소문자 무시)
             if (rssi >= targetRssi && lobbyMinor?.uppercase() == minorHex) {
@@ -95,16 +96,21 @@ class BeaconFunction {
                 RestController.instance.openLobby(newdata) { returnCode, message ->
                     RestController.instance.Message("서버 응답 returnCode:  " + returnCode + " message : " + message)
                     if (returnCode == 0) {
-                        App.instance.context?.let { ctx ->
-                            try {
-                                val userName = UserDataSingleton.instance.getUserName() ?: "입주민"
-                                showNotification(ctx, userName)
-                                Log.d("TEST", "🔔 서버 성공 응답 확인 후 알림 표시")
-                                RestController.instance.Message("공동현관문 비컨 응답 ok : " + UserDataSingleton.instance.getUserName())
-                            } catch (e: Exception) {
-                                Log.e("TEST", "❌ 알림 표시 실패: ${e.message}")
-                                RestController.instance.Message("공동현관문 비컨 응답 false : " + e.message)
+                        if (UserDataSingleton.instance.openLobbyAlarmFlag) {
+                            App.instance.context?.let { ctx ->
+                                try {
+                                    val userName = UserDataSingleton.instance.getUserName() ?: "입주민"
+                                    showNotification(ctx, userName)
+                                    Log.d("TEST", "🔔 서버 성공 응답 확인 후 알림 표시")
+                                    RestController.instance.Message("공동현관문 비컨 응답 ok : " + UserDataSingleton.instance.getUserName())
+                                } catch (e: Exception) {
+                                    Log.e("TEST", "❌ 알림 표시 실패: ${e.message}")
+                                    RestController.instance.Message("공동현관문 비컨 응답 false : " + e.message)
+                                }
                             }
+                        } else {
+                            Log.d("TEST", "🔕 알림 꺼짐 상태 — showNotification 생략")
+                            RestController.instance.Message("🔕 알림 꺼짐 상태 — showNotification 생략")
                         }
                     } else {
                         Log.w("TEST", "⚠️ 서버 응답 실패 returnCode: $returnCode, message: $message")

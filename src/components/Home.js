@@ -34,6 +34,7 @@ const Home = () => {
   const [ho, setHo] = useState(null);
   const [userId, setUserId] = useState(null);
   const [lobbyList, setLobbyList] = useState([]);
+  const [area, setArea] = useState(null);
 
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [parkingResult, setParkingResult] = useState(null);
@@ -227,8 +228,10 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
       ]);
       if (userData) {
         const parsed = JSON.parse(userData);
-        const data = area === 'dongtan' ? (parsed.result ?? parsed) : parsed;
+        // 동탄/광교 모두 result 하위에 사용자 정보가 존재
+        const data = parsed.result ?? parsed;
         const resolvedUserId = data?.userId || data?.id || null;
+        setArea(area);
         setDong(data?.dong);
         setHo(data?.ho);
         setUserId(resolvedUserId);
@@ -251,14 +254,14 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadInitialData} />}
       >
         <View style={styles.inner}>
-          {/* <View style={styles.carSelectBox}>
+          <View style={styles.carSelectBox}>
             <Text style={styles.carSelectLabel}>선택 차량</Text>
             <TouchableOpacity style={styles.carSelectBtn} onPress={() => setCarsModalOpen(true)} disabled={passiveBusy}>
               <Text style={styles.carSelectText}>{selectedCarNumber || '차량을 선택하세요'}</Text>
             </TouchableOpacity>
-          </View> */}
+          </View>
 
-          {/* <View style={styles.centerButtonArea}>
+          <View style={styles.centerButtonArea}>
             <TouchableOpacity
               style={[styles.btn, styles.btnOutline, (passiveBusy || !selectedCarNumber) && styles.btnDisabled]}
               onPress={handleManualParkPosition}
@@ -271,21 +274,23 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
                 </View>
               ) : <Text style={styles.btnOutlineText}>수동 주차위치 수집</Text>}
             </TouchableOpacity>
-          </View> */}
-
-          <View style={styles.lobbyArea}>
-            <Text style={styles.sectionTitle}>공동현관 제어</Text>
-            {lobbyList.map(item => (
-              <TouchableOpacity key={item.id} style={[styles.btn, styles.btnPrimary, styles.lobbyBtn]} onPress={() => handleLobbyOpen(item)}>
-                <Text style={styles.btnPrimaryText}>{item.floor}층 {item.line}라인 문열기</Text>
-              </TouchableOpacity>
-            ))}
           </View>
+
+          {area !== 'gwanggyo' && (
+            <View style={styles.lobbyArea}>
+              <Text style={styles.sectionTitle}>공동현관 제어</Text>
+              {lobbyList.map(item => (
+                <TouchableOpacity key={item.id} style={[styles.btn, styles.btnPrimary, styles.lobbyBtn]} onPress={() => handleLobbyOpen(item)}>
+                  <Text style={styles.btnPrimaryText}>{item.floor}층 {item.line}라인 문열기</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
 
       {/* 차량 선택 모달 */}
-      {/* <Modal visible={carsModalOpen} transparent={true} animationType="slide">
+      <Modal visible={carsModalOpen} transparent={true} animationType="slide">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCarsModalOpen(false)}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}><Text style={styles.modalTitle}>차량 선택</Text></View>
@@ -302,17 +307,17 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
             />
           </View>
         </TouchableOpacity>
-      </Modal> */}
+      </Modal>
 
       {/* 위치 확인 모달 (parkingResult가 있을 때만 내용 표시) */}
-      {/* <Modal visible={confirmModalOpen} animationType="fade" transparent={true}>
+      <Modal visible={confirmModalOpen} animationType="fade" transparent={true}>
         <View style={styles.modalFullOverlay}>
           {parkingResult && (
             <View style={styles.confirmModalContent}>
               <Text style={styles.confirmTitle}>주차 위치 확인</Text>
               <Text style={styles.confirmSubTitle}>인식된 위치: {parkingResult.cellName}</Text>
               <View style={styles.mapContainer}>
-                <PassParkingLocation deviceLoc={parkingResult} visible={confirmModalOpen} />
+                <PassParkingLocation deviceLoc={parkingResult} visible={confirmModalOpen} area={area} />
               </View>
               <View style={styles.confirmBtnRow}>
                 <TouchableOpacity style={[styles.confirmBtn, styles.btnRetry]} onPress={() => {setConfirmModalOpen(false); setParkingResult(null); handleManualParkPosition();}}>
@@ -325,7 +330,7 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
             </View>
           )}
         </View>
-      </Modal> */}
+      </Modal>
     </SafeScreen>
   );
 };

@@ -26,22 +26,39 @@ const ORIGIN_W = 1572;
 const ORIGIN_H = 1146;
 
 const MAP_IMAGES = {
-  P1: require('../assets/P1.png'),
-  P2_E: require('../assets/P2.png'),
-  P2_W: require('../assets/P5.png'),
-  P3_G: require('../assets/P3.png'),
-  P3_B: require('../assets/P4.png'),
-  default: require('../assets/P1.png'),
+  dongtan: {
+    P1:   require('../assets/dongtan/P1.png'),
+    P2_E: require('../assets/dongtan/P2_E.png'),
+    P2_W: require('../assets/dongtan/P2_W.png'),
+    P3_G: require('../assets/dongtan/P3_G.png'),
+    P3_B: require('../assets/dongtan/P3_B.png'),
+    default: require('../assets/dongtan/P1.png'),
+  },
+  gwanggyo: {
+    'B1-103': require('../assets/gwanggyo/B1-103.png'),
+    'B1-104': require('../assets/gwanggyo/B1-104.png'),
+    'B2-101': require('../assets/gwanggyo/B2-101.png'),
+    'B2-102': require('../assets/gwanggyo/B2-102.png'),
+    'B2-103': require('../assets/gwanggyo/B2-103.png'),
+    'B2-104': require('../assets/gwanggyo/B2-104.png'),
+    'B2-G':   require('../assets/gwanggyo/B2-G.png'),
+    'B3-101': require('../assets/gwanggyo/B3-101.png'),
+    'B3-102': require('../assets/gwanggyo/B3-102.png'),
+    'B3-103': require('../assets/gwanggyo/B3-103.png'),
+    'B3-104': require('../assets/gwanggyo/B3-104.png'),
+    default:  require('../assets/gwanggyo/B1-103.png'),
+  },
 };
 
-const InternalParkingMap = ({ deviceLoc, onInteractingChange }) => {
+const InternalParkingMap = ({ deviceLoc, onInteractingChange, area }) => {
   const zoomRef = useRef(null);
   const [layoutSize, setLayoutSize] = useState({ width: 0, height: 0 });
 
   const bgImage = useMemo(() => {
-    if (!deviceLoc?.floor) return MAP_IMAGES.default;
-    return MAP_IMAGES[deviceLoc.floor] || MAP_IMAGES.default;
-  }, [deviceLoc?.floor]);
+    const maps = MAP_IMAGES[area] ?? MAP_IMAGES.dongtan;
+    if (!deviceLoc?.floor) return maps.default;
+    return maps[deviceLoc.floor] ?? maps.default;
+  }, [deviceLoc?.floor, area]);
 
   const onLayout = (e) => {
     const { width, height } = e.nativeEvent.layout;
@@ -117,6 +134,7 @@ const InternalParkingMap = ({ deviceLoc, onInteractingChange }) => {
 const Parking = () => {
   const [dong, setDong] = useState(null);
   const [ho, setHo] = useState(null);
+  const [area, setArea] = useState('dongtan');
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshEnabled, setRefreshEnabled] = useState(true);
@@ -125,12 +143,18 @@ const Parking = () => {
   const flatListRef = useRef(null);
 
   const fetchParkingList = useCallback(async (opts = { silent: false }) => {
-    const userData = await EncryptedStorage.getItem('user');
+    const [userData, areaRaw] = await Promise.all([
+      EncryptedStorage.getItem('user'),
+      EncryptedStorage.getItem('area'),
+    ]);
     if (!userData) return;
     const parsed = JSON.parse(userData);
-    const d = parsed?.dong ?? parsed?.DONG;
-    const h = parsed?.ho ?? parsed?.HO;
-    
+    // 동탄/광교 모두 result 하위에 사용자 정보 존재
+    const info = parsed.result ?? parsed;
+    const d = info?.dong;
+    const h = info?.ho;
+
+    setArea(areaRaw ?? 'dongtan');
     setDong(d);
     setHo(h);
 
@@ -191,6 +215,7 @@ const Parking = () => {
             <InternalParkingMap
               deviceLoc={deviceLoc}
               onInteractingChange={isInteracting => setRefreshEnabled(!isInteracting)}
+              area={area}
             />
           </View>
           <Text style={styles.zoomGuide}>지도를 벌려서 상세 위치를 확인하세요</Text>

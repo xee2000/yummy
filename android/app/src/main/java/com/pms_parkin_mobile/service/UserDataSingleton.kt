@@ -13,6 +13,9 @@ class UserDataSingleton private constructor() {
     private var UserName: String? = null
     private var Cel: String? = null
     private var ID: String? = null
+
+    private var Area: String? = null
+    private var UUID: String? = null
     var isIsDriver: Boolean = false
         private set
     var userId: String? = null
@@ -22,6 +25,7 @@ class UserDataSingleton private constructor() {
             save("user_id", value)
         }
     private var OpenMINOR: ArrayList<LobbyOpenData>?
+    var openLobbyAlarmFlag: Boolean = true  // 공동현관 알림 on/off (기본값: on)
     var bigDataSend: Boolean? = null
         get() = field == null || field == true
         set(bigDataSend) {
@@ -48,7 +52,10 @@ class UserDataSingleton private constructor() {
         UserName = sharedPreferences!!.getString("user_name", null)
         Cel = sharedPreferences!!.getString("cel", null)
         ID = sharedPreferences!!.getString("id", null)
+        Area = sharedPreferences!!.getString("area", null)
+        UUID = sharedPreferences!!.getString("uuid", null)
         this.isIsDriver = sharedPreferences!!.getBoolean("is_driver", false)
+        this.openLobbyAlarmFlag = sharedPreferences!!.getBoolean("open_lobby_alarm_flag", true)
         userId = sharedPreferences!!.getString("user_id", null)
 
         val jsonStr = sharedPreferences!!.getString("open_minor", null)
@@ -93,6 +100,17 @@ class UserDataSingleton private constructor() {
         return ID
     }
 
+    fun getArea(): String? {
+        return Area
+    }
+
+    fun getUUID(): String? {
+        return UUID
+    }
+
+
+
+
 //    fun getUserId(): String? {
 //        return userId
 //    }
@@ -127,11 +145,26 @@ class UserDataSingleton private constructor() {
         save("id", id)
     }
 
+    fun setArea(area: String?){
+        this.Area = area
+        save("area", area)
+    }
+
+    fun setUUID(uuid: String?) {
+        this.UUID = uuid
+        save("uuid", uuid)
+    }
+
     fun setIsDriver(isDriver: Boolean) {
         this.isIsDriver = isDriver
         if (sharedPreferences != null) {
             sharedPreferences!!.edit().putBoolean("is_driver", isDriver).apply()
         }
+    }
+
+    fun setOpenLobbyAlarmFlag(flag: Boolean) {
+        this.openLobbyAlarmFlag = flag
+        sharedPreferences?.edit()?.putBoolean("open_lobby_alarm_flag", flag)?.apply()
     }
 
 //    fun setUserId(userId: String?) {

@@ -21,12 +21,9 @@ class BluetoothService : Service() {
         private const val CHANNEL_ID = "ble_scan_channel"
         const val FOREGROUND_NOTIFICATION_ID = 821
 
-        //동탄
-//        const val UUID = "20151005-8864-5654-4159-013500201901"
-        //광교
-        const val UUID = "20151005-8864-5654-4111-710200210801"
-        //반석
-//        const val UUID = "20151005-8864-5654-3020-013900202001"
+        // 현장별 UUID — 로그인 시 UserDataSingleton에 저장된 값 사용
+        // fallback: 동탄 UUID
+        private const val UUID_FALLBACK = "20151005-8864-5654-4159-013500201901"
         private const val BEACON_MANUFACTURER_ID = 0x4C
         private const val BEACON_SUBTYPE = 0x02
         private const val BEACON_SUBTYPE_LENGTH = 0x15
@@ -316,7 +313,8 @@ class BluetoothService : Service() {
         }
 
         val uuidRaw = bytesToHex(bytes, 2, 16)
-        val normalizedTargetUuid = UUID.replace("-", "").lowercase()
+        val activeUuid = UserDataSingleton.instance.getUUID() ?: UUID_FALLBACK
+        val normalizedTargetUuid = activeUuid.replace("-", "").lowercase()
         if (!uuidRaw.contains(normalizedTargetUuid)) return
 
         val buf = java.nio.ByteBuffer.wrap(bytes)
@@ -340,17 +338,19 @@ class BluetoothService : Service() {
         when (major) {
             1 -> {
                 if(!App.instance.isPassOpenLobbyFlag) return;
+                //광교레이크시티는 공동현관문 서비스 미제공
+                if(UserDataSingleton.instance.getArea().equals("gwanggyo")) return;
                 Log.i(TAG, "🏢 [Lobby] 로비 감지 (Minor: $minor, SmoothRSSI: ${"%.1f".format(smoothedRssi)})")
                 RestController.instance.Message("로비비컨 감지 : " + minor)
                 BeaconFunction.getInstance().OnlyOpenLobby(minor, smoothedRssi)
             }
             4 -> {
                 Log.i(TAG, "🚗 [Stay] 주차면 감지 (Minor: $minor, SmoothRSSI: ${"%.1f".format(smoothedRssi)})")
-//                beaconProcessor.processStayParking(minor, smoothedRssi)
+                beaconProcessor.processStayParking(minor, smoothedRssi)
             }
             5 -> {
                 Log.i(TAG, "🔄 [Change] 주차면 변화 감지 (Major: 5, Minor: $minor)")
-//                beaconProcessor.processChangeParking(major, minor, smoothedRssi)
+                beaconProcessor.processChangeParking(major, minor, smoothedRssi)
             }
             else -> Log.d(TAG, "❓ [Other] 정의되지 않은 Major: $major")
         }

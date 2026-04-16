@@ -18,7 +18,7 @@ import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from 'react-native-responsive-screen';
-import RestApi from '../common/RestApi';
+import RestApi, { BASE_UUID } from '../common/RestApi';
 import PermissionAlarm from '../common/PermissionAlarm';
 
 const LoginPage = () => {
@@ -99,7 +99,9 @@ const LoginPage = () => {
         await EncryptedStorage.setItem('user', JSON.stringify(userData));
 
         if (Platform.OS === 'android' && AndroidModule) {
-          AndroidModule.startUserIntentService(JSON.stringify(userData));
+          // 현장별 UUID + area를 userData에 포함해서 Android로 전달
+          const payload = { ...userData, uuid: BASE_UUID[selectedArea], area: selectedArea };
+          AndroidModule.startUserIntentService(JSON.stringify(payload));
           AndroidModule.StartApplication();
         }
         navigation.navigate('HomeTabs');

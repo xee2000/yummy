@@ -30,7 +30,8 @@ const Header = () => {
         console.log('userData : ' + JSON.stringify(userData));
         if (userData) {
           const parsed = JSON.parse(userData);
-          const data = area === 'dongtan' ? (parsed.result ?? parsed) : parsed;
+          // 동탄/광교 모두 result 하위에 사용자 정보가 존재
+          const data = parsed.result ?? parsed;
           setUserInfo({
             dong: data.dong || '',
             ho: data.ho || '',

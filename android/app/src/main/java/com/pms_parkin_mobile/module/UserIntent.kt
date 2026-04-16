@@ -42,10 +42,12 @@ class UserIntent : IntentService("UserIntent") {
                     userStore.setHo(resolve("ho"))
                     userStore.setUserName(resolve("name"))
                     userStore.setCel(resolve("cel"))
-                    val resolvedUserId = resolve("userId", "d")
+                    val resolvedUserId = resolve("userId", "id")
                     userStore.setID(resolve("userId"))
+                    userStore.setArea(resolve("area"))
+                    userStore.setUUID(resolve("uuid"))
 
-                    Log.d("UserIntent", "dong=${userStore.getDong()} ho=${userStore.getHo()} userId=$resolvedUserId")
+                    Log.d("UserIntent", "dong=${userStore.getDong()} ho=${userStore.getHo()} userId=$resolvedUserId area=${userStore.getArea()}")
 
                     // 4. minorList 파싱 — payload 또는 root 어디에 있든 처리
                     val minorArray = when {
