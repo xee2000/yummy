@@ -1,0 +1,128 @@
+.login {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 24px;
+  background: linear-gradient(180deg, #EFF4FF 0%, #F8FAFC 40%);
+}
+
+.login__top {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-top: 80px;
+  text-align: center;
+}
+
+.login__logo {
+  font-size: 72px;
+  margin-bottom: 16px;
+}
+
+.login__title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1A1A2E;
+  margin-bottom: 12px;
+}
+
+.login__subtitle {
+  font-size: 16px;
+  color: #6B7280;
+  line-height: 1.6;
+}
+
+.login__features {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  padding: 40px 0;
+}
+
+.login__feature {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.login__feature-icon {
+  font-size: 32px;
+  width: 56px;
+  height: 56px;
+  background: #fff;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.login__feature-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6B7280;
+}
+
+.login__bottom {
+  padding-bottom: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login__error {
+  color: #EF4444;
+  font-size: 14px;
+  text-align: center;
+}
+
+.login__toss-btn {
+  width: 100%;
+  padding: 16px;
+  background: #3D8EF0;
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: opacity 0.15s;
+}
+
+.login__toss-btn:active { opacity: 0.85; }
+.login__toss-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.login__toss-icon {
+  width: 24px;
+  height: 24px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login__spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.login__notice {
+  font-size: 11px;
+  color: #9CA3AF;
+  text-align: center;
+  line-height: 1.5;
+}

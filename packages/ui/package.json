@@ -10,10 +10,10 @@
   },
   "peerDependencies": {
     "react": ">=18",
-    "react-native": ">=0.72"
+    "react-router-dom": ">=6"
   },
   "devDependencies": {
-    "@types/react": "^19.1.1",
+    "@types/react": "^18.3.1",
     "typescript": "^5.8.3"
   }
 }

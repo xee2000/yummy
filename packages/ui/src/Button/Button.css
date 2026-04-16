@@ -1,0 +1,31 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s;
+}
+.btn:active { opacity: 0.75; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn--full { width: 100%; }
+
+.btn--primary { background: #3D8EF0; color: #fff; }
+.btn--secondary { background: #EFF4FF; color: #3D8EF0; border: 1px solid #3D8EF0; }
+.btn--ghost { background: transparent; color: #3D8EF0; }
+
+.btn--sm { padding: 8px 16px; font-size: 14px; }
+.btn--md { padding: 14px 24px; }
+.btn--lg { padding: 18px 32px; font-size: 18px; }
+
+.btn__spinner {
+  width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

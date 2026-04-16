@@ -1,0 +1,14 @@
+.profile {padding: 0 16px 80px;}
+.profile__card {margin: 16px 0 12px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center;}
+.avatar {width: 72px; height: 72px; border-radius: 50%; background: #EFF4FF; display: flex; align-items: center; justify-content: center; font-size: 32px; margin-bottom: 4px;}
+.card-header {display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;}
+.weight-row {display: flex; align-items: center; gap: 12px; margin-bottom: 10px;}
+.cal-row {display: flex; align-items: center; justify-content: space-around;}
+.cal-item {display: flex; flex-direction: column; align-items: center; gap: 4px;}
+.cal-divider {width: 1px; height: 40px; background: #E5E7EB;}
+.chart {display: flex; justify-content: space-between; align-items: flex-end; height: 120px;}
+.bar-wrap {display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;}
+.bar-track {width: 20px; height: 70px; background: #F3F4F6; border-radius: 4px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden;}
+.bar-fill {width: 100%; border-radius: 4px; transition: height 0.3s ease;}
+.menu-item {display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 14px 0; border-bottom: 1px solid #F3F4F6; background: none; cursor: pointer; text-align: left;}
+.menu-item:last-child {border-bottom: none;}

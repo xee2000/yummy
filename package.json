@@ -7,19 +7,17 @@
     "packages/*"
   ],
   "scripts": {
-    "android": "yarn workspace @yummy/mobile android",
-    "ios": "yarn workspace @yummy/mobile ios",
-    "start": "yarn workspace @yummy/mobile start",
+    "dev": "npm run --prefix apps/web dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "type-check": "turbo run type-check"
   },
   "devDependencies": {
-    "turbo": "^2.5.4",
-    "typescript": "^5.8.3",
+    "eslint": "^8.19.0",
     "prettier": "2.8.8",
-    "eslint": "^8.19.0"
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
   },
   "engines": {
     "node": ">=20"

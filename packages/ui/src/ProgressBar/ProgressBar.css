@@ -1,0 +1,10 @@
+.progress-track {
+  width: 100%;
+  background: #F3F4F6;
+  border-radius: 100px;
+  overflow: hidden;
+}
+.progress-fill {
+  border-radius: 100px;
+  transition: width 0.3s ease;
+}
