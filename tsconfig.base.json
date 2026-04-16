@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "target": "ES2020",
+    "jsx": "react-native",
+    "baseUrl": ".",
+    "paths": {}
+  },
+  "exclude": ["node_modules"]
+}
