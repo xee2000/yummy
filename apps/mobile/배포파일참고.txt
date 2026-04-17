@@ -1,0 +1,30 @@
+디버그용 android apk추출
+./gradlew assembleRelease
+build시 ip가 안바뀔경우
+npm run start -- --reset-cache
+
+빌드시
+1.
+
+npx react-native bundle \
+  --platform android \
+  --dev false \
+  --entry-file index.js \
+  --bundle-output android/app/src/main/assets/index.android.bundle \
+  --assets-dest android/app/src/main/res/
+
+
+2. 
+  ./gradlew assembleRelease
+
+
+$env:PATH += ";$env:LOCALAPPDATA\Android\Sdk\platform-tools"
+adb devices
+
+npx react-native start --reset-cache
+
+# 안드로이드 실행
+npx react-native run-android
+
+# Metro 따로 띄울 때
+npx react-native start

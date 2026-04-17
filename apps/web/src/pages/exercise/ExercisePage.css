@@ -10,3 +10,11 @@
 .ex-add-row {display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;}
 .duration-row {display: flex; align-items: center; gap: 6px;}
 .duration-input {width: 64px; padding: 6px 10px; border: 1px solid #E5E7EB; border-radius: 8px; font-size: 16px; text-align: center; background: #F8FAFC;}
+
+/* 세트 입력 */
+.sets-header {display: flex; gap: 8px; align-items: center; padding: 4px 0 6px; border-bottom: 1px solid #F3F4F6; margin-bottom: 6px;}
+.sets-header span {flex: 1; text-align: center;}
+.set-row {display: flex; gap: 8px; align-items: center; margin-bottom: 8px;}
+.set-input {flex: 1; padding: 8px 6px; border: 1px solid #E5E7EB; border-radius: 8px; font-size: 15px; text-align: center; background: #F8FAFC; min-width: 0;}
+.add-set-btn {width: 100%; padding: 8px; margin: 4px 0 12px; background: #F3F4F6; border: none; border-radius: 8px; font-size: 14px; color: #6B7280; cursor: pointer;}
+.add-set-btn:hover {background: #E5E7EB;}

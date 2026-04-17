@@ -1,41 +1,47 @@
 import {apiClient} from './client';
 
-export interface ExerciseItem {
-  id: string;
+export type TrackingType = 'reps' | 'time' | 'both';
+
+export interface ExerciseType {
+  id: number;
   name: string;
-  category: 'cardio' | 'strength' | 'flexibility' | 'sports';
-  caloriesPerMinute: number;
-  description?: string;
+  nameKo: string;
+  muscleGroup: string | null;
+  trackingType: TrackingType;
 }
 
-export interface ExerciseRecord {
-  id: string;
-  date: string;
-  exerciseId: string;
-  exerciseName: string;
-  durationMinutes: number;
-  caloriesBurned: number;
-  intensity: 'low' | 'medium' | 'high';
+export interface WorkoutSetPayload {
+  exerciseTypeId: number;
+  setNumber: number;
+  reps?: number;
+  weight?: number;
+  durationSeconds?: number;
 }
 
-export interface DailyExerciseSummary {
-  date: string;
-  totalCaloriesBurned: number;
-  totalDurationMinutes: number;
-  records: ExerciseRecord[];
+export interface CreateWorkoutLogPayload {
+  workoutDate: string; // 'YYYY-MM-DD'
+  notes?: string;
+  sets: WorkoutSetPayload[];
 }
 
 export const exerciseApi = {
-  searchExercise: (query: string): Promise<ExerciseItem[]> =>
-    apiClient.get('/exercise/search', {params: {q: query}}),
+  /** 운동 종목 전체 조회 */
+  getExerciseTypes: (): Promise<ExerciseType[]> =>
+    apiClient.get('/exercise-types'),
 
-  getDailySummary: (date: string): Promise<DailyExerciseSummary> =>
-    apiClient.get(`/exercise/daily/${date}`),
+  /** 운동 기록 저장 */
+  createWorkoutLog: (userId: number, payload: CreateWorkoutLogPayload) =>
+    apiClient.post(`/users/${userId}/workout-logs`, payload),
 
-  addRecord: (
-    record: Omit<ExerciseRecord, 'id' | 'caloriesBurned'>,
-  ): Promise<ExerciseRecord> => apiClient.post('/exercise/records', record),
+  /** 날짜별 운동 기록 조회 */
+  getWorkoutLogByDate: (userId: number, date: string) =>
+    apiClient.get(`/users/${userId}/workout-logs/by-date`, {params: {date}}),
 
-  deleteRecord: (id: string): Promise<void> =>
-    apiClient.delete(`/exercise/records/${id}`),
+  /** 종목별 오늘 추천 */
+  getRecommendation: (userId: number, exerciseTypeId: number) =>
+    apiClient.get(`/users/${userId}/recommendations/exercise/${exerciseTypeId}`),
+
+  /** 영양 추천 */
+  getNutritionRecommendation: (userId: number, date: string) =>
+    apiClient.get(`/users/${userId}/recommendations/nutrition`, {params: {date}}),
 };
