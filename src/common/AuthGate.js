@@ -1,13 +1,61 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import EncryptedStorage from 'react-native-encrypted-storage';
 import { useNavigation } from '@react-navigation/native';
+import { APP_VERSION, VERSION_CHECK_URL } from '../config/AppVersion';
+import ForceUpdateModal from './ForceUpdateModal';
+
+// ── 버전 비교 ("1.3" vs "1.4") ───────────────────────────────────
+function isVersionLessThan(current, minimum) {
+  const toNumbers = v =>
+    String(v)
+      .split('.')
+      .map(n => parseInt(n, 10) || 0);
+  const cur = toNumbers(current);
+  const min = toNumbers(minimum);
+  const len = Math.max(cur.length, min.length);
+  for (let i = 0; i < len; i++) {
+    const c = cur[i] ?? 0;
+    const m = min[i] ?? 0;
+    if (c < m) return true;
+    if (c > m) return false;
+  }
+  return false;
+}
 
 export default function AuthGate() {
   const navigation = useNavigation();
+  const [needsUpdate, setNeedsUpdate] = useState(false);
+  const [storeUrl, setStoreUrl] = useState('');
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const init = async () => {
+      // ── 1단계: 버전 체크 ──────────────────────────────────────
+      try {
+        const res = await fetch(VERSION_CHECK_URL, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const minVersion = json.minVersion ?? '1.0';
+          const url = json.storeUrl ?? '';
+          console.log(
+            `[AuthGate] 버전 체크: 현재=${APP_VERSION}, 최소=${minVersion}`,
+          );
+          if (isVersionLessThan(APP_VERSION, minVersion)) {
+            console.log('[AuthGate] 업데이트 필요 → 강제 업데이트 팝업');
+            setStoreUrl(url);
+            setNeedsUpdate(true);
+            return; // 인증 체크 건너뜀
+          }
+        }
+      } catch (e) {
+        // 서버 연결 실패 시 업데이트 체크 스킵 (앱 이용 가능)
+        console.warn('[AuthGate] 버전 체크 실패 (서버 미응답) — 스킵:', e.message);
+      }
+
+      // ── 2단계: 인증 체크 ──────────────────────────────────────
       try {
         const raw = await EncryptedStorage.getItem('user');
         console.log('[AuthGate] Retrieved user data:', raw);
@@ -15,9 +63,6 @@ export default function AuthGate() {
         if (raw) {
           try {
             const user = JSON.parse(raw);
-
-            // ✅ 수정된 비교 로직: user 객체가 존재하고, name 필드에 값이 있는지 확인
-            // 로그 데이터 기준: {"name":"김두열", "dong":"2512", ...}
             if (user && user.name && user.name.trim() !== '') {
               console.log('[AuthGate] Valid user found, navigating to Home');
               navigation.reset({
@@ -31,7 +76,6 @@ export default function AuthGate() {
           }
         }
 
-        // 유저 정보가 없거나 올바르지 않으면 로그인 화면으로
         console.log('[AuthGate] No valid user, navigating to Login');
         navigation.reset({
           index: 0,
@@ -46,12 +90,15 @@ export default function AuthGate() {
       }
     };
 
-    checkAuth();
+    init();
   }, [navigation]);
 
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" color="#2563EB" />
+
+      {/* 강제 업데이트 팝업 (닫기 불가) */}
+      <ForceUpdateModal visible={needsUpdate} storeUrl={storeUrl} />
     </View>
   );
 }
