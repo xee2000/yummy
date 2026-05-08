@@ -14,8 +14,9 @@ class MainActivity : ReactActivity() {
         DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        // ✅ 권한 요청/흐름은 RN에서만 처리 (MainActivity에서는 아무것도 안함)
+        // react-native-screens: Fragment 복원을 막기 위해 null 전달
+        // https://github.com/software-mansion/react-native-screens/issues/17
+        super.onCreate(null)
     }
 
     override fun onResume() {
