@@ -101,10 +101,17 @@ class SensorService : Service(), SensorEventListener {
             .setSmallIcon(R.drawable.logo)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            // Android 12+(API 31+): 앱이 백그라운드 상태일 때 포그라운드 서비스 시작 불가
+            // ForegroundServiceStartNotAllowedException → 서비스 안전 종료
+            Timber.w("$TAG: startForeground 불가 (백그라운드 제한), 서비스 종료: ${e.message}")
+            stopSelf()
         }
     }
 
