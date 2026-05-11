@@ -402,7 +402,7 @@ class BeaconTimerManager(
 
     private fun collectLobbyIteration() {
         collectLobbyTimerJob = scope.launch {
-            delay(3_000L)
+            delay(120_000L) // 2분
 
             // 취소된 경우 (cancelCollectLobbyTimer 호출) → 즉시 종료
             if (!isCollectLobbyRunning) return@launch
