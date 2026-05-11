@@ -7,7 +7,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import com.google.gson.GsonBuilder
 import com.pms_parkin_mobile.api.RestController
 import android.util.Log
 import com.pms_parkin_mobile.util.TotalGzipService
@@ -85,6 +84,7 @@ class BeaconTimerManager(
         // SensorService 센서 상태 초기화 (죽어있으면 재시작)
         val svc = SensorService.getInstance()
         Log.d("TEST", "▶ startWholeTimer: SensorService=${if (svc != null) "실행중" else "null → 재시작"}")
+        RestController.instance.Message("AccelStart user : " + UserDataSingleton.instance.getID())
         if (svc != null) {
             svc.resetSensorState()
         } else {
@@ -184,7 +184,7 @@ class BeaconTimerManager(
 
         // -- 7. ParkingTotal 조립 ------------------------------------------
         val sensorData  = sensorService?.sensorDataStore
-//        val bigDataSend = UserDataStore.userData.bigDataSend
+        val bigDataSend = UserDataSingleton.instance.bigDataSend
         Log.d("TEST" ,"최종 accelList2 확인 : " + sensorData?.accelList2)
         val total = ParkingTotal(
             inputDate      = state.inputTime,
@@ -201,20 +201,20 @@ class BeaconTimerManager(
         Log.d("TEST" ,"최종 데이터 확인 : " + total)
 
 
-        // -- 8. bigDataSend → Gzip 압축 → file 첨부 -----------------------
-        // 원본: gyroList2를 잠시 null로 비우고 압축 후 다시 채우는 방식
-        // Kotlin data class는 copy()로 깔끔하게 처리
-        val finalTotal = {
+        // -- 8. bigDataSend 여부에 따라 압축 여부 결정 ----------------------
+        val finalTotal = if (bigDataSend == true) {
+            // bigDataSend ON: gyroList2 제외 후 GZIP 압축 → file 필드 첨부
             val totalWithoutGyro2 = total.copy(gyroList2 = null)
             val gzipBytes = TotalGzipService.toGzipBytes(totalWithoutGyro2)
             total.copy(file = gzipBytes)
+        } else {
+            // bigDataSend OFF: 압축 없이 그대로 전송
+            total
         }
+        Log.d("TEST", "bigDataSend=$bigDataSend → file=${if (finalTotal.file != null) "${finalTotal.file!!.size} bytes" else "null (압축 안 함)"}")
 
         // -- 9. ParkingComplete 전송 ---------------------------------------
-        val gson = GsonBuilder()
-            .excludeFieldsWithoutExposeAnnotation()
-            .create()
-        RestController.instance.Parking(context,total)
+        RestController.instance.Parking(context, finalTotal)
         Timber.i("$TAG: ParkingComplete 전송 beacons=${beaconList.size} accelBeacons=${accelBeaconList.size}")
 
 
