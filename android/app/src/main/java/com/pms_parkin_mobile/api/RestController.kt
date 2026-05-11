@@ -12,11 +12,10 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
 import android.os.CountDownTimer
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.pms_parkin_mobile.R
+import com.pms_parkin_mobile.dto.BeaconLocationResponse
 import com.pms_parkin_mobile.dto.LobbyOpenData
 import com.pms_parkin_mobile.dto.User
 import com.pms_parkin_mobile.foreground.OpenLobbyAlarm
@@ -25,12 +24,19 @@ import com.pms_parkin_mobile.service.TotalCompressor.toGzipBytes
 import com.pms_parkin_mobile.service.UserDataSingleton
 import com.pms_parkin_mobile.data.SensorDataStore
 import com.woorisystem.domain.ParkingTotal
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
 class RestController private constructor() {
     private val retrofitAPI: RetrofitAPI = RetropitClient.apiService
+
+    /** IO 전용 스코프 — sendParking 의 무거운 직렬화를 메인 스레드에서 분리 */
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private var isRetryingNow = false
     private var networkCallback: NetworkCallback? = null
@@ -41,25 +47,6 @@ class RestController private constructor() {
         val network = cm.activeNetwork ?: return false
         val capabilities = cm.getNetworkCapabilities(network) ?: return false
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-    }
-
-    fun getUserId(userId: Int?) {
-        Log.d(TAG, "getUserId 전송 시작 - id: $userId")
-        val call = retrofitAPI.getUserId(userId)
-
-        call?.enqueue(object : Callback<User?> {
-            override fun onResponse(call: Call<User?>, response: Response<User?>) {
-                if (response.isSuccessful && response.body() != null) {
-                    Log.d(TAG, "getUserId 조회 성공: ${response.body()}")
-                } else {
-                    Log.e(TAG, "getUserId 조회 실패 (코드): ${response.code()}")
-                }
-            }
-
-            override fun onFailure(call: Call<User?>, t: Throwable) {
-                Log.e(TAG, "getUserId 네트워크 오류: ${t.message}")
-            }
-        })
     }
 
     fun gyroinfo(userId: String?, errorcode: Int) {
@@ -231,31 +218,70 @@ class RestController private constructor() {
         })
     }
 
+    /**
+     * 추정 좌표(x, y)를 서버에 전송하여 해당 범위 내 비컨 1개를 반환받는다.
+     * @param x 가중치 기반 추정 X 좌표
+     * @param y 가중치 기반 추정 Y 좌표
+     * @param onResult 성공 시 BeaconLocationResponse, 실패 시 null 반환
+     */
+    fun findBeaconByCoords(x: Double, y: Double, onResult: (BeaconLocationResponse?) -> Unit) {
+        Log.d(TAG, "findBeaconByCoords 요청 - x: $x, y: $y")
+        val call = retrofitAPI.findBeaconByLocation(x, y)
+
+        call?.enqueue(object : Callback<BeaconLocationResponse?> {
+            override fun onResponse(
+                call: Call<BeaconLocationResponse?>,
+                response: Response<BeaconLocationResponse?>
+            ) {
+                if (response.isSuccessful && response.body() != null) {
+                    Log.d(TAG, "findBeaconByCoords 성공: ${response.body()}")
+                    onResult(response.body())
+                } else {
+                    Log.e(TAG, "findBeaconByCoords 응답 실패 (코드): ${response.code()}")
+                    onResult(null)
+                }
+            }
+
+            override fun onFailure(call: Call<BeaconLocationResponse?>, t: Throwable) {
+                Log.e(TAG, "findBeaconByCoords 네트워크 오류: ${t.message}")
+                onResult(null)
+            }
+        })
+    }
+
+
+
     private fun sendParking(context: Context, total: ParkingTotal) {
         isRetryingNow = true
 
-        val userId = UserDataSingleton.instance.userId
-        val dong = UserDataSingleton.instance.getDong()
-        val ho = UserDataSingleton.instance.getHo()
+        // ⚠️ ANR 방지: toGzipBytes + Retrofit 직렬화(ByteArray→Base64+ICU)가
+        //   메인 스레드에서 실행되면 Input dispatching timed out ANR 이 발생한다.
+        //   → IO 스레드에서 실행해 메인 스레드를 블로킹하지 않는다.
+        ioScope.launch {
+            val userId = UserDataSingleton.instance.userId
+            val dong = UserDataSingleton.instance.getDong()
+            val ho = UserDataSingleton.instance.getHo()
 
-        Log.d("TEST", "userId : " + userId)
-        UserDataSingleton.instance.bigDataSend?.let {
-            if (!it) {
-                Log.d("TEST", "normalFlag : ${UserDataSingleton.instance.bigDataSend}")
-                val call = retrofitAPI.Parking(total, userId, dong, ho)
-                call?.enqueue(createParkingCallback(context, total))
-            } else {
-                Log.d("TEST", "bigFlag : ${UserDataSingleton.instance.bigDataSend}")
-                val tempGyroList2 = total.gyroList2
-                total.gyroList2 = null
+            Log.d("TEST", "userId : $userId")
+            UserDataSingleton.instance.bigDataSend?.let {
+                if (!it) {
+                    Log.d("TEST", "normalFlag : ${UserDataSingleton.instance.bigDataSend}")
+                    val call = retrofitAPI.Parking(total, userId, dong, ho)
+                    call?.enqueue(createParkingCallback(context, total))
+                } else {
+                    Log.d("TEST", "bigFlag : ${UserDataSingleton.instance.bigDataSend}")
+                    val tempGyroList2 = total.gyroList2
+                    total.gyroList2 = null
 
-                val file = toGzipBytes(total)
-                total.file = file
-                total.gyroList2 = tempGyroList2
+                    // CPU-heavy: GZIP 압축 → IO 스레드에서 안전하게 수행
+                    val file = toGzipBytes(total)
+                    total.file = file
+                    total.gyroList2 = tempGyroList2
 
-                Log.d("TEST", "total2 : ${total.gyroList2}")
-                val call = retrofitAPI.Parking(total, userId, dong, ho)
-                call?.enqueue(createParkingCallback(context, total))
+                    Log.d("TEST", "total2 : ${total.gyroList2}")
+                    val call = retrofitAPI.Parking(total, userId, dong, ho)
+                    call?.enqueue(createParkingCallback(context, total))
+                }
             }
         }
     }
@@ -317,12 +343,13 @@ class RestController private constructor() {
                 }
                 networkCallback = null
 
-                Handler(Looper.getMainLooper()).post {
-                    if (!isRetryingNow) {
-                        sendParking(context, total)
-                    } else {
-                        Log.d("TEST", "이미 재시도 중이어서 중복 전송은 하지 않음")
-                    }
+                // onAvailable 은 이미 백그라운드 스레드에서 호출됨.
+                // sendParking 자체가 ioScope.launch 로 IO 스레드에서 실행되므로
+                // 메인 루퍼에 post 할 필요 없음 → Handler 제거.
+                if (!isRetryingNow) {
+                    sendParking(context, total)
+                } else {
+                    Log.d("TEST", "이미 재시도 중이어서 중복 전송은 하지 않음")
                 }
             }
 
