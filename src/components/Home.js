@@ -51,7 +51,7 @@ const Home = () => {
     if (!targetDong || !targetHo) return;
     try {
       const res = await RestApi.post('openLobby/findByDong', null, {
-        params: { dong: Number(targetDong), ho: Number(targetHo), ...(targetUserId ? { userId: String(targetUserId) } : {}) },
+        params: { dong: Number(targetDong), ho: Number(targetHo), userId: String(targetUserId) },
       });
 
       const list = Array.isArray(res?.data) ? res.data : [];
