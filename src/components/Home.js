@@ -44,24 +44,37 @@ const Home = () => {
     return selectedCar.carNumber || selectedCar;
   }, [selectedCar]);
 
-  const fetchLobbyInfo = useCallback(async (targetDong, targetHo) => {
+  // -----------------------------------------------------------
+  // fetchLobbyInfo: 서버에서 floor/line 가져오고 minorMap으로 minor/rssi 병합
+  // -----------------------------------------------------------
+  const fetchLobbyInfo = useCallback(async (targetDong, targetHo, targetUserId, minorMap = {}) => {
     if (!targetDong || !targetHo) return;
     try {
-      const res = await RestApi.post('/app/openLobby/findByDong', null, {
-        params: { dong: Number(targetDong), ho: Number(targetHo) },
+      const res = await RestApi.post('openLobby/findByDong', null, {
+        params: { dong: Number(targetDong), ho: Number(targetHo), ...(targetUserId ? { userId: String(targetUserId) } : {}) },
       });
-      setLobbyList(Array.isArray(res?.data) ? res.data : []);
+
+      const list = Array.isArray(res?.data) ? res.data : [];
+
+      // 서버 데이터에 minorMap의 minor/rssi 병합
+      const merged = list.map((item, idx) => ({
+        ...item,
+        minor: item.minor || minorMap[idx]?.minor || '',
+        rssi:  item.rssi  || minorMap[idx]?.rssi  || '',
+      }));
+
+      console.log('[Lobby] merged list:', JSON.stringify(merged));
+      setLobbyList(merged);
     } catch (e) {
       console.warn('[Lobby] fetch error:', e.message);
     }
   }, []);
 
   const fetchCars = useCallback(async (d, h) => {
-    console.log('dong ho : ' + d + " ho : " + h);
     if (!d || !h) return;
     setCarsLoading(true);
     try {
-      const res = await RestApi.get('/app/carInfo', {
+      const res = await RestApi.get('carInfo', {
         params: { dong: Number(d), ho: Number(h) },
       });
       const rawData = res?.data;
@@ -113,20 +126,19 @@ const Home = () => {
             console.log('Native resEnd:', JSON.stringify(resEnd));
 
             if (resEnd && resEnd.beaconId) {
-              const response = await RestApi.get('/app/findBybeaconId', {
-                params: { beaconId: resEnd.beaconId }
+              const response = await RestApi.get('findBybeaconId', {
+                params: { beaconId: resEnd.beaconId },
               });
 
               console.log('Server Data:', JSON.stringify(response.data));
 
               if (response.data) {
-                // 💡 에러 방지를 위해 response.data 값을 직접 변수에 담아 setParkingResult 처리
                 const resultData = {
                   x: Number(response.data.x || 0),
                   y: Number(response.data.y || 0),
                   floor: response.data.mapId || 'P1',
                   cellName: response.data.cellName || '미지정',
-                  beaconId: response.data.beaconId || resEnd.beaconId, // 서버 데이터 우선, 없으면 스캔값 사용
+                  beaconId: response.data.beaconId || resEnd.beaconId,
                 };
 
                 console.log('Setting Parking Result:', JSON.stringify(resultData));
@@ -151,10 +163,9 @@ const Home = () => {
   }, [selectedCarNumber, passiveBusy]);
 
   // -----------------------------------------------------------
-  // ✅ 2. 위치 확정 (최신 parkingResult 참조 보장)
+  // ✅ 2. 위치 확정
   // -----------------------------------------------------------
   const handleConfirmLocation = useCallback(async () => {
-    // 💡 로그 확인용
     console.log('Confirming for User:', userId);
     console.log('Confirming for Car:', selectedCarNumber);
     console.log('Confirming Result Data:', JSON.stringify(parkingResult));
@@ -165,20 +176,20 @@ const Home = () => {
     }
 
     try {
-const response = await RestApi.put('/app/updateParkingLocation', null, {
-      params: {
-        userId: String(userId),     // 반드시 문자열로 변환
-        dong: Number(dong),         // 숫자로 변환
-        ho: Number(ho),
-        carNumber: String(selectedCarNumber),
-        beaconId: String(parkingResult.beaconId),
-      },
-    });
+      const response = await RestApi.put('updateParkingLocation', null, {
+        params: {
+          userId: String(userId),
+          dong: Number(dong),
+          ho: Number(ho),
+          carNumber: String(selectedCarNumber),
+          beaconId: String(parkingResult.beaconId),
+        },
+      });
 
       if (response.status === 200 || response.status === 201) {
         Alert.alert('성공', '주차 위치가 성공적으로 등록되었습니다.');
         setConfirmModalOpen(false);
-        setParkingResult(null); // 사용 완료 후 초기화
+        setParkingResult(null);
       } else {
         Alert.alert('실패', '서버 응답 오류가 발생했습니다.');
       }
@@ -186,12 +197,13 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
       console.error('[Home] Update API Error:', e);
       Alert.alert('오류', '서버 통신 중 에러가 발생했습니다.');
     }
-  }, [userId, dong, ho, selectedCarNumber, parkingResult]); // ✨ 의존성 배열에 parkingResult 필수
+  }, [userId, dong, ho, selectedCarNumber, parkingResult]);
 
   // -----------------------------------------------------------
   // ✅ 3. 공동현관 문열기
   // -----------------------------------------------------------
   const handleLobbyOpen = useCallback(async (item) => {
+    console.log('[Lobby] open item:', JSON.stringify(item));
     try {
       const formData = [
         `id=${encodeURIComponent(userId || '')}`,
@@ -201,7 +213,9 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
         `rssi=${encodeURIComponent(item.rssi || '')}`,
       ].join('&');
 
-      const res = await RestApi.post('/pass/openLobby', formData, {
+      console.log('[Lobby] formData:', formData);
+
+      const res = await RestApi.post('pass/openLobby', formData, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
@@ -220,28 +234,58 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
     }
   }, [userId, dong, ho]);
 
+  // -----------------------------------------------------------
+  // 초기 데이터 로드
+  // -----------------------------------------------------------
   const loadInitialData = useCallback(async () => {
     try {
-      const [userData, area] = await Promise.all([
+      const [userData, savedArea] = await Promise.all([
         EncryptedStorage.getItem('user'),
         EncryptedStorage.getItem('area'),
       ]);
+
       if (userData) {
         const parsed = JSON.parse(userData);
-        // 동탄/광교 모두 result 하위에 사용자 정보가 존재
         const data = parsed.result ?? parsed;
         const resolvedUserId = data?.userId || data?.id || null;
-        setArea(area);
+
+        setArea(savedArea);
         setDong(data?.dong);
         setHo(data?.ho);
         setUserId(resolvedUserId);
-        fetchLobbyInfo(data?.dong, data?.ho);
+
+        // minorList가 있으면 먼저 화면에 표시 후 서버에서 floor/line 병합
+        if (data?.minorList && data.minorList.length > 0) {
+          const mapped = data.minorList.map((m, idx) => ({
+            id: idx,
+            minor: m.minor,
+            rssi: m.rssi,
+            floor: m.floor ?? '',
+            line: m.line ?? '',
+          }));
+
+          console.log('[Home] minorList from storage:', JSON.stringify(mapped));
+          setLobbyList(mapped); // 먼저 표시
+
+          // idx 기반 minorMap 생성
+          const minorMap = mapped.reduce((acc, m) => {
+            acc[m.id] = { minor: m.minor, rssi: m.rssi };
+            return acc;
+          }, {});
+
+          // 서버에서 floor/line 가져오면서 minor 병합
+          fetchLobbyInfo(data?.dong, data?.ho, resolvedUserId, minorMap);
+        } else {
+          // minorList 없으면 서버에서만 가져오기
+          fetchLobbyInfo(data?.dong, data?.ho, resolvedUserId);
+        }
+
         fetchCars(data?.dong, data?.ho);
       }
     } catch (e) {
       console.warn('[Home] load error:', e);
     }
-  }, [fetchLobbyInfo, fetchCars]);
+  }, [fetchLobbyInfo, fetchCars]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadInitialData();
@@ -249,8 +293,8 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
 
   return (
     <SafeScreen style={styles.container} backgroundColor="#FFFFFF" edges="top">
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent} 
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadInitialData} />}
       >
         <View style={styles.inner}>
@@ -272,16 +316,26 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
                   <ActivityIndicator size="small" color="#0A84FF" style={{ marginRight: 8 }} />
                   <Text style={styles.btnOutlineText}>수집 중... ({countdown}s)</Text>
                 </View>
-              ) : <Text style={styles.btnOutlineText}>수동 주차위치 수집</Text>}
+              ) : (
+                <Text style={styles.btnOutlineText}>수동 주차위치 수집</Text>
+              )}
             </TouchableOpacity>
           </View>
 
-          {area !== 'gwanggyo' && (
+          {area === 'dongtan' && (
             <View style={styles.lobbyArea}>
               <Text style={styles.sectionTitle}>공동현관 제어</Text>
-              {lobbyList.map(item => (
-                <TouchableOpacity key={item.id} style={[styles.btn, styles.btnPrimary, styles.lobbyBtn]} onPress={() => handleLobbyOpen(item)}>
-                  <Text style={styles.btnPrimaryText}>{item.floor}층 {item.line}라인 문열기</Text>
+              {lobbyList.map((item, idx) => (
+                <TouchableOpacity
+                  key={item.id ?? idx}
+                  style={[styles.btn, styles.btnPrimary, styles.lobbyBtn]}
+                  onPress={() => handleLobbyOpen(item)}
+                >
+                  <Text style={styles.btnPrimaryText}>
+                    {item.floor ? `${item.floor}층 ` : ''}
+                    {item.line ? `${item.line}라인 ` : `현관${idx + 1} `}
+                    문열기
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -293,12 +347,17 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
       <Modal visible={carsModalOpen} transparent={true} animationType="slide">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCarsModalOpen(false)}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}><Text style={styles.modalTitle}>차량 선택</Text></View>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>차량 선택</Text>
+            </View>
             <FlatList
               data={cars}
               keyExtractor={(item, index) => index.toString()}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.carItem} onPress={() => { setSelectedCar(item); setCarsModalOpen(false); }}>
+                <TouchableOpacity
+                  style={styles.carItem}
+                  onPress={() => { setSelectedCar(item); setCarsModalOpen(false); }}
+                >
                   <Text style={[styles.carItemText, selectedCarNumber === (item.carNumber || item) && styles.selectedCarText]}>
                     {item.carNumber || item}
                   </Text>
@@ -309,7 +368,7 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
         </TouchableOpacity>
       </Modal>
 
-      {/* 위치 확인 모달 (parkingResult가 있을 때만 내용 표시) */}
+      {/* 위치 확인 모달 */}
       <Modal visible={confirmModalOpen} animationType="fade" transparent={true}>
         <View style={styles.modalFullOverlay}>
           {parkingResult && (
@@ -320,7 +379,10 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
                 <PassParkingLocation deviceLoc={parkingResult} visible={confirmModalOpen} area={area} />
               </View>
               <View style={styles.confirmBtnRow}>
-                <TouchableOpacity style={[styles.confirmBtn, styles.btnRetry]} onPress={() => {setConfirmModalOpen(false); setParkingResult(null); handleManualParkPosition();}}>
+                <TouchableOpacity
+                  style={[styles.confirmBtn, styles.btnRetry]}
+                  onPress={() => { setConfirmModalOpen(false); setParkingResult(null); handleManualParkPosition(); }}
+                >
                   <Text style={styles.btnRetryText}>다시 스캔</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.confirmBtn, styles.btnConfirm]} onPress={handleConfirmLocation}>
@@ -338,8 +400,6 @@ const response = await RestApi.put('/app/updateParkingLocation', null, {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   scrollContent: { flexGrow: 1, paddingBottom: 20 },
-  banner: { padding: 12, backgroundColor: '#FFF5CC', alignItems: 'center' },
-  bannerText: { color: '#7A5D00', fontSize: 13, fontWeight: '500' },
   inner: { flex: 1, padding: 20 },
   carSelectBox: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 14, backgroundColor: '#F9FAFB', marginBottom: 15 },
   carSelectLabel: { fontSize: 14, fontWeight: '700', color: '#374151' },
