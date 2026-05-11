@@ -194,13 +194,31 @@ class App private constructor() {
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
-                val stackTrace = throwable.stackTrace
-                    .take(10)
-                    .joinToString("\n") { "  at ${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})" }
-                val crashMsg = "[CRASH] ${throwable.javaClass.simpleName}: ${throwable.message}\n$stackTrace"
+                val sb = StringBuilder()
+                sb.append("[CRASH] ${throwable.javaClass.name}: ${throwable.message}\n")
+
+                // 메인 예외 스택 (최대 20줄)
+                throwable.stackTrace.take(20).forEach {
+                    sb.append("  at ${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})\n")
+                }
+
+                // 원인 예외(cause) 체인 추가
+                var cause = throwable.cause
+                var depth = 0
+                while (cause != null && depth < 3) {
+                    sb.append("Caused by: ${cause.javaClass.name}: ${cause.message}\n")
+                    cause.stackTrace.take(10).forEach {
+                        sb.append("  at ${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})\n")
+                    }
+                    cause = cause.cause
+                    depth++
+                }
+
+                val crashMsg = sb.toString()
                 Log.e("CRASH", crashMsg)
-                RestController.instance.Message(crashMsg)
-                Thread.sleep(500) // 전송 대기
+
+                // 동기 전송 — enqueue + sleep 대신 execute() 로 전송 완료 보장
+                RestController.instance.messageCrashSync(crashMsg)
             } catch (_: Exception) {}
             defaultHandler?.uncaughtException(thread, throwable)
         }

@@ -219,6 +219,28 @@ class RestController private constructor() {
     }
 
     /**
+     * 크래시 리포트 전용 동기 전송.
+     * 앱이 종료되기 직전 UncaughtExceptionHandler 에서 호출되므로
+     * enqueue(비동기) 대신 execute(동기)를 사용해 전송 완료를 보장한다.
+     */
+    fun messageCrashSync(message: String?) {
+        val userId = runCatching {
+            App.instance?.userId?.takeIf { it.isNotEmpty() }
+                ?: UserDataSingleton.instance.userId
+        }.getOrNull()
+
+        try {
+            // 메시지가 너무 길면 서버 URL 한계(2 KB) 초과 → 앞부분 1800자로 자름
+            val truncated = message?.take(1800)
+            val call = retrofitAPI.Message(userId, truncated)
+            call?.execute()
+            Log.d(TAG, "messageCrashSync 전송 완료")
+        } catch (e: Exception) {
+            Log.e(TAG, "messageCrashSync 전송 실패: ${e.message}")
+        }
+    }
+
+    /**
      * 추정 좌표(x, y)를 서버에 전송하여 해당 범위 내 비컨 1개를 반환받는다.
      * @param x 가중치 기반 추정 X 좌표
      * @param y 가중치 기반 추정 Y 좌표
