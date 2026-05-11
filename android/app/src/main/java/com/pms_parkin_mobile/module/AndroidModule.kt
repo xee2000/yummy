@@ -34,7 +34,8 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
     fun StartApplication() {
         Log.d("AndroidModule", "StartApplication called")
         val ctx: Context = reactApplicationContext
-        ctx.startService(Intent(ctx, UserIntent::class.java))
+        // UserIntent는 startUserIntentService()에서 user extra와 함께 이미 시작됨
+        // 여기서 extra 없이 한번 더 시작하면 onHandleIntent에 null data가 들어오므로 제거
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             ContextCompat.startForegroundService(ctx, Intent(ctx, BluetoothService::class.java))
             ctx.startService(Intent(ctx, SensorService::class.java))
