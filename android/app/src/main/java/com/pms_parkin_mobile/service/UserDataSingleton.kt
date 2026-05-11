@@ -25,12 +25,12 @@ class UserDataSingleton private constructor() {
             save("user_id", value)
         }
     private var OpenMINOR: ArrayList<LobbyOpenData>?
+
+    @JvmField
     var openLobbyAlarmFlag: Boolean = true  // 공동현관 알림 on/off (기본값: on)
     var bigDataSend: Boolean? = null
-        get() = field == null || field == true
-        set(bigDataSend) {
-            field = bigDataSend == null || bigDataSend
-        }
+        get() = field == true   // null이면 false (기본값: 일반 전송 모드)
+        set(value) { field = value }
 
     private var sharedPreferences: SharedPreferences? = null
 
