@@ -27,6 +27,8 @@ const Option = ({ navigation }) => {
   const [serviceEnabled, setServiceEnabled] = useState(false);
   // alarmEnabled: 공동현관 알림 on/off
   const [alarmEnabled, setAlarmEnabled] = useState(true);
+  // bigDataSend: 압축 데이터 전송 on/off
+  const [bigDataSend, setBigDataSend] = useState(false);
 
   const { AndroidModule } = NativeModules;
 
@@ -42,6 +44,7 @@ const Option = ({ navigation }) => {
         setSensorOk(!!res?.Ble);
         setServiceEnabled(!!res?.Lobby);
         setAlarmEnabled(res?.AlarmFlag !== false); // 기본값 true
+        setBigDataSend(!!res?.BigDataSend);
       }
     } catch (err) {
       console.error('[Option] ServiceCheck failed:', err);
@@ -120,6 +123,7 @@ const Option = ({ navigation }) => {
   // -----------------------------
   // ✅ 3. 공동현관 알림 토글 (AlarmFlag)
   // -----------------------------
+
   const onToggleAlarm = useCallback(async () => {
     try {
       const nextStatus = !alarmEnabled;
@@ -134,6 +138,41 @@ const Option = ({ navigation }) => {
       Alert.alert('오류', '공동현관 알림 설정 변경에 실패했습니다.');
     }
   }, [alarmEnabled, AndroidModule, checkServiceStatus]);
+
+  // -----------------------------
+  // ✅ 4. 압축 데이터 전송 토글 (BigDataSend)
+  // -----------------------------
+  const onToggleBigDataSend = useCallback(() => {
+    const nextStatus = !bigDataSend;
+
+    // on/off 모두 경고창 표시
+    Alert.alert(
+      '주의',
+      nextStatus
+        ? '압축 데이터 전송을 켜시려면 관리자에게 문의 후 설정해 주시기 바랍니다.\n계속하시겠습니까?'
+        : '압축 데이터 전송을 끄시려면 관리자에게 문의 후 설정해 주시기 바랍니다.\n계속하시겠습니까?',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '확인',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (Platform.OS === 'android' && AndroidModule?.setBigDataSend) {
+                await AndroidModule.setBigDataSend(nextStatus);
+                await checkServiceStatus();
+              } else {
+                setBigDataSend(nextStatus);
+              }
+            } catch (err) {
+              console.error('setBigDataSend failed:', err);
+              Alert.alert('오류', '압축 데이터 전송 설정 변경에 실패했습니다.');
+            }
+          },
+        },
+      ],
+    );
+  }, [bigDataSend, AndroidModule, checkServiceStatus]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -209,6 +248,27 @@ const Option = ({ navigation }) => {
         </View>
       </View>
 
+      {/* ✅ 압축 데이터 전송 on/off */}
+      <View style={styles.itemRow}>
+        <View>
+          <Text style={styles.itemLabel}>압축 데이터 전송</Text>
+          <Text style={styles.itemDesc}>관리자 문의 후 변경하세요</Text>
+        </View>
+        <View style={styles.rightWrap}>
+          <Text style={[styles.stateText, bigDataSend ? styles.on : styles.off]}>
+            {bigDataSend ? '켜짐' : '꺼짐'}
+          </Text>
+          <Switch
+            value={bigDataSend}
+            onValueChange={onToggleBigDataSend}
+            trackColor={{ false: '#d1d5db', true: '#ef4444' }}
+            thumbColor={'#ffffff'}
+            ios_backgroundColor="#d1d5db"
+            style={{ marginLeft: 8 }}
+          />
+        </View>
+      </View>
+
       <TouchableOpacity
         style={styles.menuButton}
         onPress={handleLogout}
@@ -259,6 +319,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   itemLabel: { fontSize: 17, fontWeight: '600', color: '#333' },
+  itemDesc: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
   rightWrap: { flexDirection: 'row', alignItems: 'center' },
   stateText: { fontSize: 15, fontWeight: '700' },
   on: { color: '#16A34A' },
