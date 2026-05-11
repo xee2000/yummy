@@ -200,6 +200,7 @@ class RestController private constructor() {
     fun Message(message: String?) {
         val userId = App.instance?.userId?.takeIf { it.isNotEmpty() }
             ?: UserDataSingleton.instance.userId
+            ?: "unknown"   // null이면 Retrofit이 파라미터를 생략 → 서버 400 방지
         Log.d(TAG, "GateInformation - message: $message")
 
         val call = retrofitAPI.Message(userId, message)
@@ -227,7 +228,7 @@ class RestController private constructor() {
         val userId = runCatching {
             App.instance?.userId?.takeIf { it.isNotEmpty() }
                 ?: UserDataSingleton.instance.userId
-        }.getOrNull()
+        }.getOrNull() ?: "unknown"   // null이면 Retrofit이 파라미터를 생략 → 서버 400 방지
 
         try {
             // 메시지가 너무 길면 서버 URL 한계(2 KB) 초과 → 앞부분 1800자로 자름
