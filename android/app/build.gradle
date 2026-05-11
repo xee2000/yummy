@@ -57,7 +57,7 @@ react {
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -82,8 +82,8 @@ android {
         applicationId "com.pms_parkin_mobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.1"
+        versionCode 9
+        versionName "1.8"
     }
     aaptOptions {
         cruncherEnabled = false
@@ -96,24 +96,39 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            storeFile file('release.keystore')
+            storePassword 'pms1234!!'
+            keyAlias 'pms_parkin_mobile'
+            keyPassword 'pms1234!!'
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+    }
+
+    packaging {
+        jniLibs {
+            pickFirsts += [
+                "lib/arm64-v8a/libworklets.so",
+                "lib/armeabi-v7a/libworklets.so",
+                "lib/x86/libworklets.so",
+                "lib/x86_64/libworklets.so"
+            ]
         }
     }
 
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
             // 1. 프로젝트 이름 (원하는 이름으로 수정 가능)
-            def projectName = "pms_parkin_mobile"
+            def projectName = "pms_parking_mobile"
             // 2. 버전 정보 가져오기
             def version = variant.versionName
             // 3. 빌드 타입 (debug 또는 release)
@@ -145,3 +160,4 @@ dependencies {
 
 }
 apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
+
