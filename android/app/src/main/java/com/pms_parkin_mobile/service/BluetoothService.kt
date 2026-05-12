@@ -272,6 +272,24 @@ class BluetoothService : Service() {
         }
     }
 
+    /** 포그라운드 알림 텍스트만 교체 (블루투스 ON/OFF 상태 반영) */
+    private fun updateForegroundNotification(bluetoothOff: Boolean) {
+        val text = if (bluetoothOff)
+            "블루투스 OFF 상태로 공동현관문과 주차위치 기능이 되지 않습니다."
+        else
+            "백그라운드 스캔 실행 중"
+
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("스마트파킹")
+            .setContentText(text)
+            .setSmallIcon(R.drawable.logo)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .build()
+
+        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
+            .notify(FOREGROUND_NOTIFICATION_ID, notification)
+    }
+
     private fun startForegroundCompat() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val chan = NotificationChannel(CHANNEL_ID, "BLE Service", NotificationManager.IMPORTANCE_LOW)
@@ -402,8 +420,16 @@ class BluetoothService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
                 val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)
-                if (state == BluetoothAdapter.STATE_ON) resetAndRestartScanning()
-                else if (state == BluetoothAdapter.STATE_OFF) stopBluetoothScanning()
+                when (state) {
+                    BluetoothAdapter.STATE_OFF -> {
+                        stopBluetoothScanning()
+                        updateForegroundNotification(bluetoothOff = true)
+                    }
+                    BluetoothAdapter.STATE_ON -> {
+                        updateForegroundNotification(bluetoothOff = false)
+                        resetAndRestartScanning()
+                    }
+                }
             }
         }
     }
