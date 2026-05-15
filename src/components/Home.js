@@ -221,8 +221,9 @@ const Home = () => {
 
       console.log('[Lobby] open result:', JSON.stringify(res?.data));
 
-      const code = res?.data?.code;
-      if (code === 0) {
+      // 서버 응답: { returnCode: 0, message: "open door ok" }
+      const returnCode = res?.data?.returnCode ?? res?.data?.code;
+      if (returnCode === 0) {
         Alert.alert('성공', '문이 열렸습니다.');
       } else {
         const msg = res?.data?.message || '문열기에 실패했습니다.';
