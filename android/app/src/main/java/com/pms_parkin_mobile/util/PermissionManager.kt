@@ -198,23 +198,13 @@ object PermissionManager {
         if (hasBackgroundLocation(activity)) return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Android 11+: 앱 권한 목록으로 바로 이동 → 위치 → '항상 허용' 2단계
-            // Toast는 설정 전환 시 DeadObjectException 유발 → 제거
-            try {
-                val intent = Intent("android.intent.action.MANAGE_APP_PERMISSIONS").apply {
-                    putExtra(Intent.EXTRA_PACKAGE_NAME, activity.packageName)
-                }
-                activity.startActivity(intent)
-            } catch (e: Exception) {
-                // 미지원 기기 fallback: 앱 정보 화면
-                try {
-                    val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                        .setData(Uri.parse("package:${activity.packageName}"))
-                    activity.startActivity(fallback)
-                } catch (e2: Exception) {
-                    android.util.Log.e("PermissionManager", "권한 설정 화면 이동 실패: ${e2.message}")
-                }
-            }
+            // Android 11+: requestPermissions 호출 → 시스템이 "설정으로 이동" 다이얼로그를
+            // 자동으로 띄우고 위치 권한 페이지로 직접 연결해줌
+            ActivityCompat.requestPermissions(
+                activity,
+                arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
+                REQ_BG_LOCATION
+            )
         } else {
             // Android 10: 런타임 다이얼로그로 요청 가능
             ActivityCompat.requestPermissions(
