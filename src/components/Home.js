@@ -298,11 +298,27 @@ const Home = () => {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadInitialData} />}
       >
         <View style={styles.inner}>
+          {/* 선택 차량 */}
           <View style={styles.carSelectBox}>
-            <Text style={styles.carSelectLabel}>선택 차량</Text>
+            <View style={styles.carSelectLabelRow}>
+              <Text style={styles.carSelectLabel}>선택 차량</Text>
+              <TouchableOpacity
+                style={styles.helpBtn}
+                onPress={() => Alert.alert('차량 문의', '선택차량이 없는 경우\n070-4457-0087 관리자에게 문의 바랍니다.')}
+              >
+                <Text style={styles.helpBtnText}>?</Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity style={styles.carSelectBtn} onPress={() => setCarsModalOpen(true)} disabled={passiveBusy}>
               <Text style={styles.carSelectText}>{selectedCarNumber || '차량을 선택하세요'}</Text>
             </TouchableOpacity>
+          </View>
+
+          {/* 수동 주차위치 안내 */}
+          <View style={styles.noticeBanner}>
+            <Text style={styles.noticeBannerText}>
+              💡 자동 주차위치 사용 시 정확도가 맞지 않을 경우, 주차 후 차량 위치에서 아래 <Text style={styles.noticeBold}>수동 주차위치 버튼</Text>을 누르시면 됩니다.
+            </Text>
           </View>
 
           <View style={styles.centerButtonArea}>
@@ -325,6 +341,14 @@ const Home = () => {
           {area === 'dongtan' && (
             <View style={styles.lobbyArea}>
               <Text style={styles.sectionTitle}>공동현관 제어</Text>
+
+              {/* 공동현관 안내 */}
+              <View style={styles.noticeBanner}>
+                <Text style={styles.noticeBannerText}>
+                  💡 설정에서 공동현관문을 ON해도 자동으로 안 열리실 경우, 아래 각 층별 <Text style={styles.noticeBold}>문열기 버튼</Text>을 통해 열기 바랍니다.
+                </Text>
+              </View>
+
               {lobbyList.map((item, idx) => (
                 <TouchableOpacity
                   key={item.id ?? idx}
@@ -402,9 +426,15 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, paddingBottom: 20 },
   inner: { flex: 1, padding: 20 },
   carSelectBox: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 14, backgroundColor: '#F9FAFB', marginBottom: 15 },
+  carSelectLabelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 0 },
   carSelectLabel: { fontSize: 14, fontWeight: '700', color: '#374151' },
+  helpBtn: { marginLeft: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: '#9CA3AF', alignItems: 'center', justifyContent: 'center' },
+  helpBtnText: { color: '#FFF', fontSize: 12, fontWeight: '700', lineHeight: 14 },
   carSelectBtn: { marginTop: 10, height: 48, borderRadius: 10, borderWidth: 1, borderColor: '#D1D5DB', backgroundColor: '#FFFFFF', paddingHorizontal: 12, justifyContent: 'center' },
   carSelectText: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  noticeBanner: { backgroundColor: '#EFF6FF', borderRadius: 10, padding: 12, marginBottom: 14, borderLeftWidth: 3, borderLeftColor: '#3B82F6' },
+  noticeBannerText: { fontSize: 13, color: '#1E40AF', lineHeight: 20 },
+  noticeBold: { fontWeight: '700' },
   centerButtonArea: { marginBottom: 35, alignItems: 'center' },
   lobbyArea: { marginTop: 10 },
   sectionTitle: { fontSize: 18, fontWeight: '800', marginBottom: 15, color: '#111' },
