@@ -198,11 +198,20 @@ object PermissionManager {
         if (hasBackgroundLocation(activity)) return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Android 11+: 앱 설정 → 권한 → 위치 → '항상 허용' 선택 유도
-            Toast.makeText(activity, "설정 > 권한 > 위치에서 '항상 허용'을 선택해주세요.", Toast.LENGTH_LONG).show()
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                .setData(Uri.parse("package:${activity.packageName}"))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            // Android 11+: 앱 권한 목록으로 바로 이동 → 위치 → '항상 허용' 2단계만 필요
+            Toast.makeText(activity, "위치 → '항상 허용'을 선택해주세요.", Toast.LENGTH_LONG).show()
+            val intent = try {
+                // 앱 권한 목록 직접 이동 (앱 정보 → 권한 클릭 생략)
+                Intent("android.intent.action.MANAGE_APP_PERMISSIONS").apply {
+                    putExtra(Intent.EXTRA_PACKAGE_NAME, activity.packageName)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            } catch (e: Exception) {
+                // 미지원 기기 fallback: 앱 정보 화면
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    .setData(Uri.parse("package:${activity.packageName}"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
             activity.startActivity(intent)
         } else {
             // Android 10: 런타임 다이얼로그로 요청 가능
