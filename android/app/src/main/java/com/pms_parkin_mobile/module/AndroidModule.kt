@@ -20,6 +20,7 @@ import com.pms_parkin_mobile.service.BluetoothService
 import com.pms_parkin_mobile.service.PassiveParkingService
 import com.pms_parkin_mobile.service.SensorService
 import com.pms_parkin_mobile.service.UserDataSingleton
+import com.pms_parkin_mobile.util.safeStartForegroundService
 import com.pms_parkin_mobile.util.PermissionManager
 import com.pms_parkin_mobile.receiver.BleScanReceiver
 class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
@@ -36,14 +37,8 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
         val ctx: Context = reactApplicationContext
         // UserIntent는 startUserIntentService()에서 user extra와 함께 이미 시작됨
         // 여기서 extra 없이 한번 더 시작하면 onHandleIntent에 null data가 들어오므로 제거
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ContextCompat.startForegroundService(ctx, Intent(ctx, BluetoothService::class.java))
-            ctx.startService(Intent(ctx, SensorService::class.java))
-        } else {
-            ctx.startService(Intent(ctx, BluetoothService::class.java))
-            ctx.startService(Intent(ctx, SensorService::class.java))
-        }
-
+        ctx.safeStartForegroundService(Intent(ctx, BluetoothService::class.java))
+        ctx.startService(Intent(ctx, SensorService::class.java))
     }
 
     @ReactMethod
@@ -78,12 +73,7 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
 
         if (serviceFlag && !bleRunning) {
             Log.d("SERVICE_CHECK", "serviceFlag=true 이지만 서비스 미실행 → 재시작")
-            val restartIntent = Intent(ctx, BluetoothService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ContextCompat.startForegroundService(ctx, restartIntent)
-            } else {
-                ctx.startService(restartIntent)
-            }
+            ctx.safeStartForegroundService(Intent(ctx, BluetoothService::class.java))
             bleRunning = true
         }
 
@@ -108,13 +98,8 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
         if (flag) {
             Log.d("SERVICE_FLAG", "서비스 시작 요청")
             App.instance.isServiceFlag = true
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ContextCompat.startForegroundService(ctx, Intent(ctx, BluetoothService::class.java))
-                ctx.startService(Intent(ctx, SensorService::class.java))
-            } else {
-                ctx.startService(Intent(ctx, BluetoothService::class.java))
-                ctx.startService(Intent(ctx, SensorService::class.java))
-            }
+            ctx.safeStartForegroundService(Intent(ctx, BluetoothService::class.java))
+            ctx.startService(Intent(ctx, SensorService::class.java))
             BleScanReceiver.startAlarm(ctx)  // ← 추가
         } else {
             App.instance.isServiceFlag = false
@@ -302,12 +287,7 @@ class AndroidModule(context: ReactApplicationContext) : ReactContextBaseJavaModu
             } else {
                 // 서비스 자체가 죽어있으면 강제 재시작
                 val ctx: Context = reactApplicationContext
-                val intent = Intent(ctx, BluetoothService::class.java)
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    androidx.core.content.ContextCompat.startForegroundService(ctx, intent)
-                } else {
-                    ctx.startService(intent)
-                }
+                ctx.safeStartForegroundService(Intent(ctx, BluetoothService::class.java))
             }
         }
     }

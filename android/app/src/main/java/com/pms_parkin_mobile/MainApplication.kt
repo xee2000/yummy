@@ -15,6 +15,7 @@ import com.pms_parkin_mobile.module.ParkingPackage
 import com.pms_parkin_mobile.service.App
 import com.pms_parkin_mobile.service.BluetoothService
 import com.pms_parkin_mobile.service.SensorService
+import com.pms_parkin_mobile.util.safeStartForegroundService
 
 class MainApplication : Application(), ReactApplication {
 
@@ -49,13 +50,8 @@ class MainApplication : Application(), ReactApplication {
     // 💡 수정 완료: instace -> instance 오타 수정 및 괄호() 제거
     if (App.instance.isServiceFlag) {
       Log.d("MainApplication", "serviceFlag=true → BluetoothService / SensorService 자동 시작")
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        ContextCompat.startForegroundService(applicationContext, Intent(applicationContext, BluetoothService::class.java))
-        applicationContext.startService(Intent(applicationContext, SensorService::class.java))
-      } else {
-        applicationContext.startService(Intent(applicationContext, BluetoothService::class.java))
-        applicationContext.startService(Intent(applicationContext, SensorService::class.java))
-      }
+      applicationContext.safeStartForegroundService(Intent(applicationContext, BluetoothService::class.java))
+      applicationContext.startService(Intent(applicationContext, SensorService::class.java))
     }
 
     loadReactNative(this)

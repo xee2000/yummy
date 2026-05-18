@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.pms_parkin_mobile.service.BluetoothService
+import com.pms_parkin_mobile.util.safeStartForegroundService
 
 class NotificationActionReceiver : BroadcastReceiver() {
 
@@ -22,11 +23,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
             Log.d("NotificationActionReceiver", "포그라운드 알림 삭제 감지 → 알림 복구 요청")
             val serviceIntent = Intent(context, BluetoothService::class.java)
             serviceIntent.action = "RESTORE_FOREGROUND"
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent)
-            } else {
-                context.startService(serviceIntent)
-            }
+            context.safeStartForegroundService(serviceIntent)
         }
     }
 }

@@ -8,6 +8,7 @@ import android.util.Log
 import com.pms_parkin_mobile.service.App
 import com.pms_parkin_mobile.service.BluetoothService
 import com.pms_parkin_mobile.service.SensorService
+import com.pms_parkin_mobile.util.safeStartForegroundService
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -22,12 +23,7 @@ class BootReceiver : BroadcastReceiver() {
         }
 
         Log.d("BootReceiver", "부팅 완료 - BluetoothService / SensorService 재시작")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(Intent(context, BluetoothService::class.java))
-            context.startService(Intent(context, SensorService::class.java))
-        } else {
-            context.startService(Intent(context, BluetoothService::class.java))
-            context.startService(Intent(context, SensorService::class.java))
-        }
+        context.safeStartForegroundService(Intent(context, BluetoothService::class.java))
+        context.startService(Intent(context, SensorService::class.java))
     }
 }
