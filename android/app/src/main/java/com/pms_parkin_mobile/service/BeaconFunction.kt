@@ -73,13 +73,13 @@ class BeaconFunction {
         }
 
         val minorHex = String.format("%04X", minor)
-        RestController.instance.openLobbyinit("스캔된 minor(dec) : $minor → hex : $minorHex / lobbyData 개수 : ${lobbyOpenData.size}")
+//        RestController.instance.openLobbyinit("스캔된 minor(dec) : $minor → hex : $minorHex / lobbyData 개수 : ${lobbyOpenData.size}")
 
         for (data in lobbyOpenData) {
             val lobbyMinor = data.minor          // DB Hex 문자열 (ex: "0721")
             val targetRssi = data.rssi?.toDoubleOrNull() ?: -100.0
 
-            RestController.instance.openLobbyinit("갖고있는 Minor : $lobbyMinor / 스캔된 Minor : $minorHex")
+//            RestController.instance.openLobbyinit("갖고있는 Minor : $lobbyMinor / 스캔된 Minor : $minorHex")
 
             // DB Hex vs 스캔 Hex 직접 비교 (대소문자 무시)
             if (rssi >= targetRssi && lobbyMinor?.uppercase() == minorHex) {
@@ -92,9 +92,9 @@ class BeaconFunction {
                     id = userData.getID()
                 }
 
-                RestController.instance.Message("api전송하려는 데이터 : $newdata")
+//                RestController.instance.Message("api전송하려는 데이터 : $newdata")
                 RestController.instance.openLobby(newdata) { returnCode, message ->
-                    RestController.instance.Message("서버 응답 returnCode:  " + returnCode + " message : " + message)
+//                    RestController.instance.Message("서버 응답 returnCode:  " + returnCode + " message : " + message)
                     if (returnCode == 0) {
                         if (UserDataSingleton.instance.openLobbyAlarmFlag) {
                             App.instance.context?.let { ctx ->
@@ -118,10 +118,10 @@ class BeaconFunction {
                     }
                 }
             } else if(rssi < targetRssi){
-                RestController.instance.Message("스캔중인 비컨의 rssi신호 약함 : " + rssi)
+//                RestController.instance.Message("스캔중인 비컨의 rssi신호 약함 : " + rssi)
 //                RestController.instance.openLobbyRssiFail(userId)
             } else if(lobbyMinor?.uppercase() != minorHex){
-                RestController.instance.Message("minor값 불일치 스캔된 minor: " + minorHex)
+//                RestController.instance.Message("minor값 불일치 스캔된 minor: " + minorHex)
 
             }
         }

@@ -198,8 +198,8 @@ class RestController private constructor() {
     }
 
     fun Message(message: String?) {
-        val userId = App.instance?.userId?.takeIf { it.isNotEmpty() }
-            ?: UserDataSingleton.instance.userId
+        val userId = UserDataSingleton.instance?.getID()?.takeIf { it.isNotEmpty() }
+            ?: UserDataSingleton.instance.getID()
             ?: "unknown"   // null이면 Retrofit이 파라미터를 생략 → 서버 400 방지
         Log.d(TAG, "GateInformation - message: $message")
 
@@ -281,15 +281,15 @@ class RestController private constructor() {
         //   메인 스레드에서 실행되면 Input dispatching timed out ANR 이 발생한다.
         //   → IO 스레드에서 실행해 메인 스레드를 블로킹하지 않는다.
         ioScope.launch {
-            val userId = UserDataSingleton.instance.userId
+            val userId = UserDataSingleton.instance.getID()
             val dong = UserDataSingleton.instance.getDong()
             val ho = UserDataSingleton.instance.getHo()
 
-            Log.d("TEST", "userId : $userId")
+            Log.d("TEST", "userId check : $userId")
             UserDataSingleton.instance.bigDataSend?.let {
                 if (!it) {
                     Log.d("TEST", "normalFlag : ${UserDataSingleton.instance.bigDataSend}")
-                    val call = retrofitAPI.Parking(total, userId, dong, ho)
+                    val call = retrofitAPI.parking(userId, dong, ho, total)
                     call?.enqueue(createParkingCallback(context, total))
                 } else {
                     Log.d("TEST", "bigFlag : ${UserDataSingleton.instance.bigDataSend}")
@@ -302,7 +302,7 @@ class RestController private constructor() {
                     total.gyroList2 = tempGyroList2
 
                     Log.d("TEST", "total2 : ${total.gyroList2}")
-                    val call = retrofitAPI.Parking(total, userId, dong, ho)
+                    val call = retrofitAPI.parking( userId, dong, ho, total)
                     call?.enqueue(createParkingCallback(context, total))
                 }
             }

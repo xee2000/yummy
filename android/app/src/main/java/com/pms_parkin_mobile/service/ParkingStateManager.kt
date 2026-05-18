@@ -132,7 +132,7 @@ class ParkingStateManager {
 
     /** 입차 시각 기록 */
     fun recordInputTime() {
-        inputTime = SimpleDateFormat("HH:mm:ss.SSS", Locale.KOREA)
+        inputTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.S", Locale.KOREA)
             .format(Calendar.getInstance().time)
     }
 

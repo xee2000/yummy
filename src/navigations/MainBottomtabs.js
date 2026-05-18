@@ -2,7 +2,6 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Home from '../components/Home';
-import TestHome from '../components/TestHome';
 import Option from '../components/Option';
 import Parking from '../components/Parking';
 const Tab = createBottomTabNavigator();
@@ -40,16 +39,6 @@ const MainBottomTabs = () => {
         }}
       />
 
-      {/* <Tab.Screen
-        name="TestHome"
-        component={TestHome}
-        options={{
-          tabBarLabel: '테스트홈',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="home-outline" color={color} size={size} />
-          ),
-        }}
-      /> */}
       <Tab.Screen
         name="Option"
         component={Option}

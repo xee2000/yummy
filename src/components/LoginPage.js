@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Text,
   View,
@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Platform,
   NativeModules,
-  Alert,
   KeyboardAvoidingView,
   Modal,
 } from 'react-native';
@@ -29,19 +28,21 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPermModal, setShowPermModal] = useState(false);
-  const [selectedArea, setSelectedArea] = useState(null); // 'dongtan' | 'gwanggyo'
+  const [selectedArea, setSelectedArea] = useState(null);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const canSubmit = userId.trim().length > 0 && password.trim().length > 0 && selectedArea !== null && !loading;
+  const canSubmit =
+    userId.trim().length > 0 &&
+    password.trim().length > 0 &&
+    selectedArea !== null &&
+    !loading;
 
   useEffect(() => {
     const checkInitialPermissions = async () => {
       if (Platform.OS !== 'android' || !AndroidModule) return;
-
       try {
         const isAllGranted = await AndroidModule.CheckPermissionsStatus();
-        if (!isAllGranted) {
-          setShowPermModal(true);
-        }
+        if (!isAllGranted) setShowPermModal(true);
       } catch (e) {
         console.warn('[Permission] Status check failed:', e);
         setShowPermModal(true);
@@ -66,26 +67,24 @@ const LoginPage = () => {
   const handleLogin = async () => {
     if (!canSubmit) return;
     setLoading(true);
+    setErrorMsg('');
 
     try {
       let formData;
       let endpoint;
 
       if (selectedArea === 'dongtan') {
-        // @ModelAttribute("loginOld") → id, pass, site 키
         formData = [
-          `id=${encodeURIComponent(userId)}`,
-          `pass=${encodeURIComponent(password)}`,
+          `id=${encodeURIComponent(userId.trim())}`,
+          `pass=${encodeURIComponent(password.trim())}`,
           `site=dongtan`,
         ].join('&');
-        endpoint = '/app/loginOld';
+        endpoint = 'loginOld';
       } else {
-        // 광교
-        formData = `id=${encodeURIComponent(userId)}&pass=${encodeURIComponent(password)}`;
-        endpoint = '/app/login';
+        formData = `id=${encodeURIComponent(userId.trim())}&pass=${encodeURIComponent(password.trim())}`;
+        endpoint = 'login';
       }
 
-      // 인터셉터가 area를 읽어 baseURL을 결정하므로 요청 전에 먼저 저장
       await EncryptedStorage.setItem('area', selectedArea);
 
       const response = await RestApi.post(endpoint, formData, {
@@ -94,24 +93,34 @@ const LoginPage = () => {
 
       const userData = response.data;
 
-      if (userData) {
-        console.log('Login success:', userData);
-        await EncryptedStorage.setItem('user', JSON.stringify(userData));
+      // result_code가 '000'인 경우만 홈으로 이동
+      console.log('data : ' + JSON.stringify(userData));
+    if (userData && userData.returnCode === 0) {
+    console.log('✅ 조건 통과, 홈으로 이동 시도');  // ← 이게 찍히는지 확인
+    
+    const userInfo = userData.result; // ← result 안에서 꺼내야 함
+    await EncryptedStorage.setItem('user', JSON.stringify(userInfo));
 
-        if (Platform.OS === 'android' && AndroidModule) {
-          // 현장별 UUID + area를 userData에 포함해서 Android로 전달
-          const payload = { ...userData, uuid: BASE_UUID[selectedArea], area: selectedArea };
-          AndroidModule.startUserIntentService(JSON.stringify(payload));
-          AndroidModule.StartApplication();
-        }
-        navigation.navigate('HomeTabs');
+    if (Platform.OS === 'android' && AndroidModule) {
+      const payload = {
+        ...userInfo,
+        uuid: BASE_UUID[selectedArea],
+        area: selectedArea,
+      };
+      AndroidModule.startUserIntentService(JSON.stringify(payload));
+      AndroidModule.StartApplication();
+    }
+  
+  console.log('✅ navigate 호출');
+  navigation.navigate('HomeTabs');
+} else {
+        // 실패 시 페이지 유지 + 하단 에러 메시지
+        setErrorMsg(userData?.message || '로그인에 실패했습니다.');
       }
     } catch (e) {
       console.warn('[Login Error]', e);
-      const errorMsg =
-        e.response?.data?.message || '로그인 중 오류가 발생했습니다.';
-      Alert.alert('로그인 실패', errorMsg);
-    } finally { 
+      setErrorMsg(e.response?.data?.message || '로그인 중 오류가 발생했습니다.');
+    } finally {
       setLoading(false);
     }
   };
@@ -140,20 +149,32 @@ const LoginPage = () => {
         </View>
 
         <View style={styles.form}>
+          {/* 지역 선택 */}
           <View style={styles.inputWrap}>
             <Text style={styles.label}>지역 선택</Text>
             <View style={styles.areaRow}>
               {[
-                { key: 'dongtan',  label: '동탄더샵' },
+                { key: 'dongtan', label: '동탄더샵' },
                 { key: 'gwanggyo', label: '광교레이크시티' },
               ].map(({ key, label }) => (
                 <TouchableOpacity
                   key={key}
-                  style={[styles.areaBtn, selectedArea === key && styles.areaBtnSelected]}
-                  onPress={() => setSelectedArea(key)}
+                  style={[
+                    styles.areaBtn,
+                    selectedArea === key && styles.areaBtnSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedArea(key);
+                    setErrorMsg('');
+                  }}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.areaBtnText, selectedArea === key && styles.areaBtnTextSelected]}>
+                  <Text
+                    style={[
+                      styles.areaBtnText,
+                      selectedArea === key && styles.areaBtnTextSelected,
+                    ]}
+                  >
                     {label}
                   </Text>
                 </TouchableOpacity>
@@ -161,6 +182,7 @@ const LoginPage = () => {
             </View>
           </View>
 
+          {/* 아이디 */}
           <View style={styles.inputWrap}>
             <Text style={styles.label}>아이디</Text>
             <TextInput
@@ -168,12 +190,16 @@ const LoginPage = () => {
               placeholder="아이디를 입력하세요"
               placeholderTextColor="#9AA3AF"
               value={userId}
-              onChangeText={setUserId}
+              onChangeText={text => {
+                setUserId(text);
+                setErrorMsg('');
+              }}
               autoCapitalize="none"
               autoCorrect={false}
             />
           </View>
 
+          {/* 비밀번호 */}
           <View style={styles.inputWrap}>
             <Text style={styles.label}>비밀번호</Text>
             <TextInput
@@ -181,7 +207,10 @@ const LoginPage = () => {
               placeholder="비밀번호를 입력하세요"
               placeholderTextColor="#9AA3AF"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={text => {
+                setPassword(text);
+                setErrorMsg('');
+              }}
               secureTextEntry={true}
               autoCapitalize="none"
               autoCorrect={false}
@@ -196,11 +225,15 @@ const LoginPage = () => {
         </View>
 
         <View style={styles.ctaWrap}>
+          {/* 에러 메시지 */}
+          {errorMsg !== '' && (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>⚠️ {errorMsg}</Text>
+            </View>
+          )}
+
           <TouchableOpacity
-            style={[
-              styles.loginButton,
-              !canSubmit && styles.loginButtonDisabled,
-            ]}
+            style={[styles.loginButton, !canSubmit && styles.loginButtonDisabled]}
             onPress={handleLogin}
             disabled={!canSubmit}
             activeOpacity={0.8}
@@ -214,8 +247,6 @@ const LoginPage = () => {
     </SafeAreaView>
   );
 };
-
-// ... 스타일은 동일 (rowInputs 등 안 쓰는 스타일은 남겨둬도 무방합니다)
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
@@ -234,7 +265,6 @@ const styles = StyleSheet.create({
   title: { fontSize: hp('4%'), fontWeight: '800', color: '#111827' },
   form: { paddingHorizontal: wp('6%'), paddingTop: hp('3%'), gap: hp('1.5%') },
   inputWrap: { width: '100%' },
-  // ✅ 동/호 나란히 배치를 위한 스타일
   rowInputs: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -261,6 +291,21 @@ const styles = StyleSheet.create({
     marginTop: 'auto',
     paddingHorizontal: wp('6%'),
     paddingVertical: hp('3%'),
+  },
+  errorBox: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: wp('3%'),
+    paddingVertical: hp('1.5%'),
+    paddingHorizontal: wp('4%'),
+    marginBottom: hp('1.5%'),
+  },
+  errorText: {
+    fontSize: hp('1.8%'),
+    color: '#DC2626',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   loginButton: {
     alignItems: 'center',

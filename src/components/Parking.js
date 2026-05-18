@@ -162,7 +162,7 @@ const Parking = () => {
     if (!opts.silent) setLoading(true);
 
     try {
-      const res = await RestApi.get('/app/findbyParkingLocationList', {
+      const res = await RestApi.get('findbyParkingLocationList', {
         params: { dong: Number(d), ho: Number(h) },
       });
       const data = res?.data ?? [];
@@ -218,7 +218,7 @@ const Parking = () => {
               area={area}
             />
           </View>
-          <Text style={styles.zoomGuide}>지도를 벌려서 상세 위치를 확인하세요</Text>
+          <Text style={styles.zoomGuide}>지도를 확대해서 상세 위치를 확인하세요</Text>
         </View>
       </View>
     );

@@ -9,7 +9,14 @@
 export const APP_VERSION = '1.3';
 
 /**
- * 버전 체크 서버 URL (인증 불필요 퍼블릭 엔드포인트)
- * pms_total_server 의 /app-version 엔드포인트
+ * 사이트별 버전 체크 URL (RestApi.js 의 BASE_URLS 와 동일한 서버)
+ * 기본값은 dongtan (area 미설정 시)
  */
-export const VERSION_CHECK_URL = 'http://192.168.0.75:3000/app-version';
+const VERSION_CHECK_URLS = {
+  dongtan:  'http://211.240.121.123:3389/pms-dongtan/app/app-version',
+  gwanggyo: 'http://211.52.72.27:4000/pms-server-web/app/app-version',
+};
+
+export function getVersionCheckUrl(area) {
+  return VERSION_CHECK_URLS[area] ?? VERSION_CHECK_URLS.dongtan;
+}

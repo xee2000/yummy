@@ -1,0 +1,24 @@
+diff --git a/node_modules/react-native-reanimated/android/build.gradle b/node_modules/react-native-reanimated/android/build.gradle
+index 1111111..2222222 100644
+--- a/node_modules/react-native-reanimated/android/build.gradle
++++ b/node_modules/react-native-reanimated/android/build.gradle
+@@ -358,8 +358,18 @@ if (project != rootProject) {
+     evaluationDependsOn(":react-native-worklets")
+
+     afterEvaluate {
+-        tasks.getByName("externalNativeBuildDebug").dependsOn(findProject(":react-native-worklets").tasks.getByName("externalNativeBuildDebug"))
+-        tasks.getByName("externalNativeBuildRelease").dependsOn(findProject(":react-native-worklets").tasks.getByName("externalNativeBuildRelease"))
++        def workletsProj = findProject(":react-native-worklets")
++
++        tasks.getByName("externalNativeBuildDebug").dependsOn(workletsProj.tasks.getByName("externalNativeBuildDebug"))
++        tasks.getByName("externalNativeBuildRelease").dependsOn(workletsProj.tasks.getByName("externalNativeBuildRelease"))
++
++        // Fix: configureCMake runs BEFORE externalNativeBuild but needs worklets' prefab_package.
++        // Ensure ALL configureCMake tasks in reanimated wait for worklets to fully build first.
++        tasks.matching { t -> t.name.startsWith("configureCMake") }.configureEach { task ->
++            task.dependsOn(workletsProj.tasks.matching { t ->
++                t.name.startsWith("externalNativeBuild")
++            })
++        }
+     }
+ }

@@ -82,9 +82,8 @@ android {
         applicationId "com.pms_parkin_mobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 9
-        versionName "1.8"
-    }
+        versionCode 15
+        versionName "1.14"    }
     aaptOptions {
         cruncherEnabled = false
         noCompress "png", "jpg", "jpeg", "gif"

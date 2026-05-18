@@ -223,6 +223,7 @@ const Home = () => {
 
       // 서버 응답: { returnCode: 0, message: "open door ok" }
       const returnCode = res?.data?.returnCode ?? res?.data?.code;
+      console.log('[Lobby] returnCode:', returnCode);
       if (returnCode === 0) {
         Alert.alert('성공', '문이 열렸습니다.');
       } else {
